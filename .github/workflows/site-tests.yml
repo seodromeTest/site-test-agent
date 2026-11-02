@@ -1,9 +1,8 @@
 name: Site testleri
 
+# Zamanlama GitHub'ın kendi zamanlayıcısıyla değil, dışarıdan (workflow_dispatch) yapılır:
+# GitHub zamanlayıcısı saatleri güvenilir tutmadı. Test saatleri README'de.
 on:
-  schedule:
-    - cron: '17 * * * *'   # saatlik kontrol (ana fonksiyonlar + upload akışları)
-    - cron: '7 6 * * 1'    # haftalık genel test (Pazartesi 06:07 UTC) – linkler dahil, her zaman rapor maili
   workflow_dispatch:
     inputs:
       mode:
@@ -31,6 +30,7 @@ jobs:
             sites
             fixtures/genel
             fixtures/builder
+            fixtures/gangsheet
 
       - uses: actions/setup-node@v4
         with:
@@ -54,13 +54,7 @@ jobs:
       - name: Test türünü belirle
         id: mode
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "7 6 * * 1" ]; then
-            echo "mode=full" >> "$GITHUB_OUTPUT"
-          else
-            echo "mode=hourly" >> "$GITHUB_OUTPUT"
-          fi
+          echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
 
       - name: Testleri çalıştır
         run: node run.js --mode ${{ steps.mode.outputs.mode }}
