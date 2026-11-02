@@ -7,7 +7,7 @@ const fileLabel = file => new RegExp(path.basename(file).slice(0, 10).replace(/[
 
 // matrix.js için: uygulamanın yükleme sonrası gösterdiği metinden ölçü/varyant/fiyat/uyarıları çıkar
 const between = (t, a, b) => { const i = t.indexOf(a); if (i < 0) return ''; const j = t.indexOf(b, i); return t.slice(i, j < 0 ? i + 1500 : j); };
-const WARN = /low|resolution|warn|exceed|too (large|wide|big|small)|wider|background|upscale|error|fail|not supported|unsupported|invalid|reject|unavailable|could not/i;
+const WARN = /\blow\b|low-res|resolution|warn|exceed|too (large|wide|big|small)|wider|background|upscale|error|fail|not supported|unsupported|invalid|reject|unavailable|could not/i;
 const warnLines = t => [...new Set(t.split('\n').map(l => l.trim()).filter(l => l && l.length < 200 && WARN.test(l)))].slice(0, 6);
 // GS Studio arayüzü shadow DOM içinde: görünen metni oradan topla
 const shadowText = page => page.evaluate(() => [...document.querySelectorAll('*')].filter(e => e.shadowRoot)
@@ -36,7 +36,12 @@ module.exports = {
       async run(page, step, file, notes, hooks = {}) {
         await step('Upload', async () => {
           await page.locator('input.ump__input').setInputFiles(file);
-          await page.getByText(/ready ·/i).first().waitFor({ timeout: hooks.uploadTimeout || 120000 });
+          const failed = page.getByText(/Upload failed/i).first();
+          await page.getByText(/ready ·/i).first().or(failed).waitFor({ timeout: hooks.uploadTimeout || 120000 });
+          if (await failed.isVisible()) {
+            const size = (await page.evaluate(() => document.body.innerText)).match(/MEASURED SIZE\n(W [\d.]+" x L [\d.]+")/)?.[1];
+            throw new Error(`Uygulama "Upload failed" dedi${size ? ` (ölçülen: ${size}, sınır 22.5")` : ' (ölçü okunamadı)'}`);
+          }
         });
         await hooks.afterUpload?.();
         await step('Sepete ekle', async () => {
@@ -64,6 +69,13 @@ module.exports = {
         });
         await hooks.afterUpload?.();
         await step('Onay kutusu', async () => {
+          // Düşük DPI'lı dosyada "below our recommended DPI" onayı da isteniyor; işaretlenmezse sepete eklenmiyor
+          const dpiAgree = page.locator('#gs-sd-dpi-agree-check');
+          if (await dpiAgree.count() && await dpiAgree.locator('xpath=ancestor::label[1]').isVisible().catch(() => false)) {
+            notes.push('Uygulama düşük DPI uyarısı verdi, onaylandı');
+            hooks.onWarning?.('Düşük DPI onayı istendi');
+            await dpiAgree.locator('xpath=ancestor::label[1]').click();
+          }
           await page.getByText(/you have full rights/i).first().click();
         });
         await step('Sepete ekle', async () => {
@@ -99,11 +111,11 @@ module.exports = {
           // ve Add to cart kapanıyor. Hız sınırında uygulamanın kendi Retry butonuyla 2 kez tekrar dene.
           const priced = page.getByText(/\$[0-9.]+ each/).filter({ visible: true }).first();
           const noPrice = page.getByText(/Pricing is unavailable/i).filter({ visible: true }).first();
-          const tooMany = page.getByText(/Too many requests/i).filter({ visible: true }).first();
+          const tooMany = page.getByText(/Too many requests|server is busy/i).filter({ visible: true }).first();
           for (let attempt = 0; ; attempt++) {
             await priced.or(noPrice).or(tooMany).waitFor({ timeout: 120000 });
             if (await priced.isVisible()) break;
-            const msg = (await tooMany.isVisible()) ? 'Too many requests (uygulamanın hız sınırı)' : 'Pricing is unavailable right now';
+            const msg = (await tooMany.isVisible()) ? (await tooMany.innerText()).trim().slice(0, 80) : 'Pricing is unavailable right now';
             if (attempt >= 2) throw new Error(`Uygulama "${msg}" dedi – fiyat hesaplanamadı, Add to cart kapalı`);
             notes.push(`Uygulama "${msg}" uyarısı verdi, 30 sn bekleyip Retry'a basıldı`);
             await page.waitForTimeout(30000);
@@ -134,6 +146,7 @@ module.exports = {
         const t = await frame.evaluate(() => document.body.innerText);
         const w = t.match(/\nWidth\n([\d.]+) in/), h = t.match(/\nHeight\n([\d.]+) in/);
         return { olcu: w && h && `${w[1]}" × ${h[1]}"`, dpi: t.match(/Resolution\n(\d+) dpi/)?.[1], varyant: t.match(/\n(\d+"x\d+")\n/)?.[1],
+          fiyat: t.match(/Price:\s*\$([\d.,]+)/)?.[1],
           uyarilar: warnLines(between(t, 'Drag & drop', 'Show Overlapping')) };
       },
       async run(page, step, file, notes, hooks = {}) {
@@ -153,12 +166,13 @@ module.exports = {
           const deadline = Date.now() + 90000;
           await page.waitForTimeout(3000);
           // Yarı saydam pikselli görsellerde "Transparent Warning" penceresi çıkıyor: uyarıyı not et, Continue ile devam et
-          const transparentWarn = fr.getByText('Transparent Warning');
+          const transparentWarn = fr.getByText(/^(Transparent|Background) Warning$/);
           while (!(await placed.isVisible())) {
             if (Date.now() > deadline) throw new Error('Görsel sheet\'e yerleştirilemedi');
             if (await transparentWarn.isVisible()) {
-              notes.push('Builder "Transparent Warning" verdi: görselde yarı saydam pikseller var');
-              hooks.onWarning?.('Transparent Warning: yarı saydam pikseller');
+              const title = (await transparentWarn.innerText()).trim();
+              notes.push(`Builder "${title}" penceresi açtı (görselde ${/Background/.test(title) ? 'arka plan' : 'yarı saydam pikseller'} var)`);
+              hooks.onWarning?.(title);
               await fr.getByRole('button', { name: /^continue$/i }).click().catch(() => {});
               await page.waitForTimeout(3000);
               continue;
