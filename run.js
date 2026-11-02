@@ -16,6 +16,7 @@ const FAIL_DEMO = args.includes('--fail-demo');
 const OUT = path.join(__dirname, 'results');
 const STATE = path.join(OUT, 'state.json');
 const DEBUG = !!process.env.DEBUG;
+fs.mkdirSync(OUT, { recursive: true });
 
 // Test görselleri: fixtures/<grup>/ klasöründen (ör. builder, genel); yoksa fixtures/ kökünden.
 // Bir grupta birden fazla görsel varsa her çalıştırmada sıradaki kullanılır.
@@ -257,7 +258,6 @@ async function testSite(browser, site, isFirstSite) {
   await browser.close();
 
   // Önceki duruma göre yeni sorunlar ve düzelenler
-  fs.mkdirSync(OUT, { recursive: true });
   let prev = {};
   try { prev = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) {}
   const now = {};
