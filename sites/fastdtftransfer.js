@@ -27,6 +27,7 @@ module.exports = {
       expectProduct: 'Upload a DTF Gang Sheet',
       fileProp: 'Print Ready',
       accepts: /\.(png|jpe?g|webp|tiff?|psd|pdf|ai|eps|svg)$/i,
+      matrixFiles: /^gangsheet_/, // hazır gang sheet yükleme ürünü
       async read(page) {
         const t = between(await page.evaluate(() => document.body.innerText), 'YOUR FILES', 'Order note');
         const m = t.match(/W ([\d.]+)" x L ([\d.]+)" · ([\d.]+"x[\d.]+")/);
@@ -56,6 +57,7 @@ module.exports = {
       expectProduct: 'Upload a DTF Gang Sheet',
       fileProp: 'Uploaded File',
       accepts: /\.(png|jpe?g|webp|psd|pdf|ai|eps|svg)$/i,
+      matrixFiles: /^gangsheet_/, // hazır gang sheet yükleme ürünü
       async read(page) {
         const t = between(await page.evaluate(() => document.body.innerText), 'Fast Upload', 'By checking this box');
         const m = t.match(/Size Matched\n(.+?) at (\d+) DPI/);
@@ -90,6 +92,7 @@ module.exports = {
       expectProduct: 'DTF Transfers By Size',
       fileProp: '_Print Ready',
       accepts: /\.(png|jpe?g|webp|svg)$/i,
+      matrixFiles: /^(tasarim|builder)_/, // tek tek tasarım: müşteri ve builder dosyaları
       async read(page) {
         const t = await shadowText(page);
         const card = between(t, 'Your images', 'Add more images') || t;
@@ -140,6 +143,7 @@ module.exports = {
       expectProduct: 'Free DTF Gang Sheet Builder',
       fileProp: '_Print Ready File',
       accepts: /\.(png|jpe?g|webp|psd|pdf|ai|eps|svg)$/i, // builder'ın desteklediği formatlarda TIFF yok
+      matrixFiles: /^(tasarim|builder)_/, // tek tek tasarım: müşteri ve builder dosyaları
       async read(page) {
         const frame = page.frames().find(f => f.url().includes('dripappsserver.com/builder'));
         if (!frame) return { uyarilar: ['Builder açılmadı'] };

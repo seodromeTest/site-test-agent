@@ -70,7 +70,7 @@ const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').re
 function html(site, flows, cells, startedAt) {
   const get = (f, file) => cells.find(c => c.akis === f.id && c.dosya === file);
   const td = c => {
-    if (!c) return '<td></td>';
+    if (!c) return '<td style="background:#f6f8fa"></td>';
     if (c.durum === 'desteklenmiyor') return '<td style="color:#6e7781;background:#f6f8fa">Desteklenmiyor</td>';
     const o = c.okunan || {};
     const lines = [
@@ -91,7 +91,7 @@ function html(site, flows, cells, startedAt) {
 <p style="color:#6e7781">${esc(startedAt)} · ${files.length} dosya × ${flows.length} ürün. Her hücre: uygulamanın okuduğu ölçü ve DPI, seçtiği varyant ve fiyat, sepete giden varyant ve fiyat, uyarılar.</p>
 <table border="1" cellpadding="6" style="border-collapse:collapse;border-color:#d0d7de">
 <tr style="background:#f6f8fa"><th>Dosya</th>${flows.map(f => `<th>${esc(f.title)}</th>`).join('')}</tr>
-${files.map(file => `<tr><td style="vertical-align:top;white-space:nowrap"><b>${esc(file)}</b></td>${flows.map(f => td(get(f, file))).join('')}</tr>`).join('\n')}
+${files.filter(file => cells.some(c => c.dosya === file)).map(file => `<tr><td style="vertical-align:top;white-space:nowrap"><b>${esc(file)}</b></td>${flows.map(f => td(get(f, file))).join('')}</tr>`).join('\n')}
 </table></body>`;
 }
 
@@ -103,7 +103,8 @@ ${files.map(file => `<tr><td style="vertical-align:top;white-space:nowrap"><b>${
   // Her ürün kendi sırasında, ürünler paralel (aynı uygulamaya art arda yüklemede hız sınırına takılmamak için)
   const cells = (await Promise.all(flows.map(async flow => {
     const out = [];
-    for (const file of files) {
+    // Ürüne uygun olmayan dosyalar (ör. gang sheet ürününe tek tasarım) hiç denenmez
+    for (const file of files.filter(f => !flow.matrixFiles || flow.matrixFiles.test(f))) {
       const c = await runCell(browser, site, flow, file);
       out.push(c);
       console.log(`${c.durum === 'ok' ? '✅' : c.durum === 'hata' ? '❌' : '–'} ${flow.id} | ${file} | ${c.okunan?.olcu || ''} ${c.okunan?.varyant || ''} ${c.okunan?.fiyat ? '$' + c.okunan.fiyat : ''}${c.hata ? ' | ' + c.hataAdimi + ': ' + c.hata : ''}`);
