@@ -1,0 +1,42 @@
+name: Dosya matrisi
+
+# Test dosyası kütüphanesindeki her dosyayı her upload ürününe yükler,
+# uygulamanın seçtiği ölçü / varyant / fiyat tablosunu üretir. Şimdilik elle çalıştırılır.
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 'Site'
+        default: fastdtftransfer
+      only:
+        description: 'Tek ürün (akış id, boş = hepsi)'
+        default: ''
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tarayıcıyı kur
+        run: npx playwright install --with-deps chromium
+
+      - name: Matrisi çalıştır
+        run: node matrix.js --site "${{ inputs.site }}" ${{ inputs.only && format('--only {0}', inputs.only) || '' }}
+
+      - name: Tabloyu ve ekran görüntülerini sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matris-${{ inputs.site }}-${{ github.run_id }}
+          path: results/
+          retention-days: 30
+          if-no-files-found: ignore

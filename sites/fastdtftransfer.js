@@ -5,6 +5,14 @@ const BASE = 'https://www.fastdtftransfer.com';
 // Builder dosya adını kısaltarak gösteriyor: adın ilk kısmıyla eşleştir
 const fileLabel = file => new RegExp(path.basename(file).slice(0, 10).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
+// matrix.js için: uygulamanın yükleme sonrası gösterdiği metinden ölçü/varyant/fiyat/uyarıları çıkar
+const between = (t, a, b) => { const i = t.indexOf(a); if (i < 0) return ''; const j = t.indexOf(b, i); return t.slice(i, j < 0 ? undefined : j); };
+const WARN = /low|resolution|warn|exceed|too (large|wide|big|small)|wider|background|upscale|error|fail|not supported|unsupported|invalid|reject|unavailable|could not/i;
+const warnLines = t => [...new Set(t.split('\n').map(l => l.trim()).filter(l => l && l.length < 200 && WARN.test(l)))].slice(0, 6);
+// GS Studio arayüzü shadow DOM içinde: görünen metni oradan topla
+const shadowText = page => page.evaluate(() => [...document.querySelectorAll('*')].filter(e => e.shadowRoot)
+  .map(e => [...e.shadowRoot.children].map(c => c.innerText || '').join('\n')).join('\n'));
+
 module.exports = {
   name: 'FastDTF Transfer',
   domain: 'fastdtftransfer.com',
@@ -18,11 +26,19 @@ module.exports = {
       url: `${BASE}/products/upload-a-dtf-gang-sheet`,
       expectProduct: 'Upload a DTF Gang Sheet',
       fileProp: 'Print Ready',
-      async run(page, step, file) {
+      accepts: /\.(png|jpe?g|webp|tiff?|psd|pdf|ai|eps|svg)$/i,
+      async read(page) {
+        const t = between(await page.evaluate(() => document.body.innerText), 'YOUR FILES', 'Order note');
+        const m = t.match(/W ([\d.]+)" x L ([\d.]+)" · ([\d.]+"x[\d.]+")/);
+        const price = t.match(/1 × [\d.]+"x[\d.]+"\n\$([\d.,]+)/) || t.match(/whole-sheet cop\w*\n\$([\d.,]+)/);
+        return { olcu: m && `${m[1]}" × ${m[2]}"`, dpi: t.match(/\n(\d+) DPI\n/)?.[1], varyant: m?.[3], fiyat: price?.[1], uyarilar: warnLines(t) };
+      },
+      async run(page, step, file, notes, hooks = {}) {
         await step('Upload', async () => {
           await page.locator('input.ump__input').setInputFiles(file);
           await page.getByText(/ready ·/i).first().waitFor({ timeout: 120000 });
         });
+        await hooks.afterUpload?.();
         await step('Sepete ekle', async () => {
           await page.getByRole('button', { name: /^add to cart$/i }).filter({ visible: true }).first().click();
         });
@@ -34,11 +50,19 @@ module.exports = {
       url: `${BASE}/products/custom-dtf-transfer`,
       expectProduct: 'Upload a DTF Gang Sheet',
       fileProp: 'Uploaded File',
-      async run(page, step, file) {
+      accepts: /\.(png|jpe?g|webp|psd|pdf|ai|eps|svg)$/i,
+      async read(page) {
+        const t = between(await page.evaluate(() => document.body.innerText), 'Fast Upload', 'By checking this box');
+        const m = t.match(/Size Matched\n(.+?) at (\d+) DPI/);
+        return { olcu: m?.[1], dpi: m?.[2], dosyaDpi: t.match(/File DPI\n(\d+)/)?.[1], varyant: t.match(/Variant\n(.+)/)?.[1],
+          fiyat: t.match(/Price\n\$([\d.,]+)/)?.[1], uyarilar: warnLines(t) };
+      },
+      async run(page, step, file, notes, hooks = {}) {
         await step('Upload', async () => {
           await page.locator('#gs-file-input').setInputFiles(file);
           await page.getByText('Upload Complete').waitFor({ timeout: 120000 });
         });
+        await hooks.afterUpload?.();
         await step('Onay kutusu', async () => {
           await page.getByText(/you have full rights/i).first().click();
         });
@@ -53,7 +77,17 @@ module.exports = {
       url: `${BASE}/products/dtf-transfers-by-size`,
       expectProduct: 'DTF Transfers By Size',
       fileProp: '_Print Ready',
-      async run(page, step, file, notes) {
+      accepts: /\.(png|jpe?g|webp|svg)$/i,
+      async read(page) {
+        const t = await shadowText(page);
+        const card = between(t, 'Your images', 'Add more images') || t;
+        // Genişlik/yükseklik inputlarda: değerleri shadow DOM'dan oku
+        const vals = await page.evaluate(() => [...document.querySelectorAll('*')].filter(e => e.shadowRoot)
+          .flatMap(e => [...e.shadowRoot.querySelectorAll('input')]).filter(i => i.offsetParent && /^[\d.]+$/.test(i.value)).map(i => i.value));
+        return { olcu: vals.length >= 2 ? `${vals[0]}" × ${vals[1]}"` : null, dpi: card.match(/(\d+) DPI/)?.[1],
+          fiyat: card.match(/\$([\d.]+) each/)?.[1], uyarilar: warnLines(card) };
+      },
+      async run(page, step, file, notes, hooks = {}) {
         await step('Upload', async () => {
           const input = page.locator('input[type=file]').first();
           // GS Studio'nun scriptleri yüklenemezse upload alanı yerine "Could not load Image to Sheet" yazıyor
@@ -76,6 +110,7 @@ module.exports = {
             await page.getByRole('button', { name: /^retry$/i }).filter({ visible: true }).first().click().catch(() => {});
           }
         });
+        await hooks.afterUpload?.();
         await step('Sepete ekle', async () => {
           await page.getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first().click();
           // GS Studio sepeti doğrulayamazsa "Shopify did not return a cart that GS-STUDIO could verify" diyor
@@ -92,7 +127,16 @@ module.exports = {
       url: `${BASE}/products/free-dtf-gang-sheet-builder`,
       expectProduct: 'Free DTF Gang Sheet Builder',
       fileProp: '_Print Ready File',
-      async run(page, step, file, notes) {
+      accepts: /\.(png|jpe?g|webp|tiff?|psd|pdf|ai|eps|svg)$/i,
+      async read(page) {
+        const frame = page.frames().find(f => f.url().includes('dripappsserver.com/builder'));
+        if (!frame) return { uyarilar: ['Builder açılmadı'] };
+        const t = await frame.evaluate(() => document.body.innerText);
+        const w = t.match(/\nWidth\n([\d.]+) in/), h = t.match(/\nHeight\n([\d.]+) in/);
+        return { olcu: w && h && `${w[1]}" × ${h[1]}"`, dpi: t.match(/Resolution\n(\d+) dpi/)?.[1], varyant: t.match(/\n(\d+"x\d+")\n/)?.[1],
+          uyarilar: warnLines(between(t, 'Drag & drop', 'Show Overlapping')) };
+      },
+      async run(page, step, file, notes, hooks = {}) {
         const fr = page.frameLocator('iframe[src*="dripappsserver.com/builder"]');
         await step('Builder açılıyor', async () => {
           await page.getByText('Build your own Gang Sheet', { exact: true }).first().click();
@@ -114,12 +158,17 @@ module.exports = {
             await page.waitForTimeout(6000);
           }
         });
+        await hooks.afterUpload?.();
         if (await fr.getByText(/reporting Failed to Add to Cart/i).count()) {
           notes.push('Builder üst bandında "Shopify is reporting Failed to Add to Cart errors" uyarısı görünüyor.');
         }
         await step('Save & Add to Cart', async () => {
           await fr.getByRole('button', { name: 'Save & Add to Cart' }).click();
           await fr.getByText('Confirmation').waitFor({ timeout: 30000 });
+          // Kalite kontrolü: her madde yeşil (geçti) ya da kırmızı (kaldı) ikonla gösteriliyor
+          const checks = await fr.locator('div.flex.items-center.space-x-2.text-sm').evaluateAll(els => els.map(e =>
+            ({ madde: e.innerText.trim(), gecti: !!e.querySelector('.text-green-500') })));
+          await hooks.onQualityCheck?.(checks);
           const anyway = fr.getByText('Print Anyway');
           if (await anyway.isVisible()) await anyway.click();
           await fr.getByText(/you have full rights/i).click();
