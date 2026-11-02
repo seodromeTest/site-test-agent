@@ -1,0 +1,76 @@
+name: Site testleri
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # saatlik kontrol (ana fonksiyonlar + upload akışları)
+    - cron: '7 6 * * 1'    # haftalık genel test (Pazartesi 06:07 UTC) – linkler dahil, her zaman rapor maili
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Test türü'
+        type: choice
+        options: [hourly, full]
+        default: hourly
+
+# Aynı anda iki tur çalışmasın (uyarı durumu karışmasın)
+concurrency:
+  group: site-tests
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tarayıcıyı kur
+        run: npx playwright install --with-deps chromium
+
+      # Uyarı durumu (hangi akış şu an hatalı) turlar arasında saklanır:
+      # yeni sorun → ACİL mail, düzelince → "Düzeldi" maili
+      - name: Önceki uyarı durumunu yükle
+        uses: actions/cache/restore@v4
+        with:
+          path: results/state.json
+          key: alert-state-${{ github.run_id }}
+          restore-keys: alert-state-
+
+      - name: Test türünü belirle
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "7 6 * * 1" ]; then
+            echo "mode=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=hourly" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Testleri çalıştır
+        run: node run.js --mode ${{ steps.mode.outputs.mode }}
+        env:
+          WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
+
+      - name: Uyarı durumunu kaydet
+        if: always() && hashFiles('results/state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: results/state.json
+          key: alert-state-${{ github.run_id }}
+
+      - name: Sonuçları ve ekran görüntülerini sakla
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonuclar-${{ steps.mode.outputs.mode }}-${{ github.run_id }}
+          path: results/
+          retention-days: 14
+          if-no-files-found: ignore
