@@ -1,5 +1,2 @@
 node_modules/
 results/
-# Firmaya ait test görselleri public repoya konmaz (bkz. README)
-fixtures/genel/
-fixtures/builder/

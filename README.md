@@ -24,8 +24,8 @@ Sonuçlar ve hata ekran görüntüleri her turun sayfasında **Artifacts** altı
 - **Secret `MAKE_WEBHOOK_URL`**: Settings → Secrets and variables → Actions. Webhook adresi asla koda yazılmaz.
 - **Siteler:** `sites/<site>.js` – her sitenin ana fonksiyon ayarı (`core`) ve upload akışları (`flows`).
   Yeni site eklemek için bu klasöre bir dosya ekleyip `run.js`'deki varsayılan `--sites` listesine yazın.
-- **Test görselleri:** `fixtures/` (gruplar: `fixtures/genel/`, `fixtures/builder/`). Firmaya ait görseller public
-  repoya konmaz; bu klasörler yoksa `fixtures/test-design.png` kullanılır.
+- **Test görselleri:** `fixtures/genel/` (upload ürünleri) ve `fixtures/builder/` (Gang Sheet Builder).
+  Bir klasörde birden fazla görsel varsa her turda sıradaki kullanılır; klasör boşsa `fixtures/test-design.png` kullanılır.
 
 ## Yerelde / sunucuda çalıştırma
 ```bash
