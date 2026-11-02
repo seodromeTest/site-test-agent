@@ -134,7 +134,9 @@ async function runFlow(browser, site, flow, demoBreak) {
     });
     await step('Sepet sayfası', async () => {
       await gotoOk(page, `${site.base}/cart`);
-      await page.getByText(new RegExp(escRe(flow.expectProduct), 'i')).filter({ visible: true }).first().waitFor({ timeout: 20000 });
+      // Bazı ürün adlarında çift boşluk var; sayfada tek boşluk olarak görünüyor
+      const name = new RegExp(escRe(flow.expectProduct).replace(/\s+/g, '\\s+'), 'i');
+      await page.getByText(name).filter({ visible: true }).first().waitFor({ timeout: 20000 });
     });
   };
   try {
