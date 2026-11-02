@@ -36,6 +36,8 @@ async function runCell(browser, site, flow, file) {
       await page.screenshot({ path: path.join(SHOTS, `${flow.id}__${file}.jpg`), type: 'jpeg', quality: 50 }).catch(() => {});
     },
     onQualityCheck: checks => { cell.kaliteKontrol = checks; },
+    onWarning: w => { (cell.uygulamaUyarilari ||= []).push(w); },
+    uploadTimeout: 240000, // büyük dosyalarda (15–20 MB) ölçüm uzun sürebiliyor
   };
   try {
     await withTimeout((async () => {
@@ -52,7 +54,7 @@ async function runCell(browser, site, flow, file) {
       if (!item) throw Object.assign(new Error('Ürün sepete düşmedi'), { stepName: 'Sepet' });
       cell.sepet = { varyant: item.variant_title, fiyat: (item.final_line_price / 100).toFixed(2),
         dusukCozunurluk: item.properties?.['_Has Low Resolution'] === 'Yes' || undefined };
-    })(), 300000, 'Hücre');
+    })(), 420000, 'Hücre');
   } catch (e) {
     cell.durum = 'hata';
     if (!cell.hata) { cell.hataAdimi = e.stepName || 'Zaman aşımı'; cell.hata = e.message.split('\n')[0].slice(0, 200); }
@@ -76,6 +78,7 @@ function html(site, flows, cells, startedAt) {
       o.varyant && `Varyant: ${esc(o.varyant)}`,
       o.fiyat && `Fiyat: $${esc(o.fiyat)}`,
       c.sepet && `Sepet: ${esc(c.sepet.varyant)} · $${esc(c.sepet.fiyat)}${c.sepet.dusukCozunurluk ? ' · düşük çözünürlük' : ''}`,
+      ...(c.uygulamaUyarilari || []).map(u => `<span style="color:#9a6700">⚠ ${esc(u)}</span>`),
       ...(c.kaliteKontrol || []).filter(k => !k.gecti).map(k => `<span style="color:#9a6700">✗ ${esc(k.madde)}</span>`),
       ...(o.uyarilar || []).map(u => `<span style="color:#9a6700">⚠ ${esc(u)}</span>`),
       c.durum === 'hata' && `<span style="color:#cf222e">❌ ${esc(c.hataAdimi)}: ${esc(c.hata)}</span>`,

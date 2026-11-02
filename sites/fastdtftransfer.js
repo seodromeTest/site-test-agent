@@ -6,7 +6,7 @@ const BASE = 'https://www.fastdtftransfer.com';
 const fileLabel = file => new RegExp(path.basename(file).slice(0, 10).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
 // matrix.js için: uygulamanın yükleme sonrası gösterdiği metinden ölçü/varyant/fiyat/uyarıları çıkar
-const between = (t, a, b) => { const i = t.indexOf(a); if (i < 0) return ''; const j = t.indexOf(b, i); return t.slice(i, j < 0 ? undefined : j); };
+const between = (t, a, b) => { const i = t.indexOf(a); if (i < 0) return ''; const j = t.indexOf(b, i); return t.slice(i, j < 0 ? i + 1500 : j); };
 const WARN = /low|resolution|warn|exceed|too (large|wide|big|small)|wider|background|upscale|error|fail|not supported|unsupported|invalid|reject|unavailable|could not/i;
 const warnLines = t => [...new Set(t.split('\n').map(l => l.trim()).filter(l => l && l.length < 200 && WARN.test(l)))].slice(0, 6);
 // GS Studio arayüzü shadow DOM içinde: görünen metni oradan topla
@@ -36,7 +36,7 @@ module.exports = {
       async run(page, step, file, notes, hooks = {}) {
         await step('Upload', async () => {
           await page.locator('input.ump__input').setInputFiles(file);
-          await page.getByText(/ready ·/i).first().waitFor({ timeout: 120000 });
+          await page.getByText(/ready ·/i).first().waitFor({ timeout: hooks.uploadTimeout || 120000 });
         });
         await hooks.afterUpload?.();
         await step('Sepete ekle', async () => {
@@ -60,7 +60,7 @@ module.exports = {
       async run(page, step, file, notes, hooks = {}) {
         await step('Upload', async () => {
           await page.locator('#gs-file-input').setInputFiles(file);
-          await page.getByText('Upload Complete').waitFor({ timeout: 120000 });
+          await page.getByText('Upload Complete').waitFor({ timeout: hooks.uploadTimeout || 120000 });
         });
         await hooks.afterUpload?.();
         await step('Onay kutusu', async () => {
@@ -127,7 +127,7 @@ module.exports = {
       url: `${BASE}/products/free-dtf-gang-sheet-builder`,
       expectProduct: 'Free DTF Gang Sheet Builder',
       fileProp: '_Print Ready File',
-      accepts: /\.(png|jpe?g|webp|tiff?|psd|pdf|ai|eps|svg)$/i,
+      accepts: /\.(png|jpe?g|webp|psd|pdf|ai|eps|svg)$/i, // builder'ın desteklediği formatlarda TIFF yok
       async read(page) {
         const frame = page.frames().find(f => f.url().includes('dripappsserver.com/builder'));
         if (!frame) return { uyarilar: ['Builder açılmadı'] };
@@ -144,7 +144,7 @@ module.exports = {
         });
         await step('Upload', async () => {
           await fr.locator('input[type=file]').first().setInputFiles(file);
-          await fr.getByText(fileLabel(file)).first().waitFor({ timeout: 90000 });
+          await fr.getByText(fileLabel(file)).first().waitFor({ timeout: hooks.uploadTimeout || 90000 });
         });
         await step('Görseli sheet\'e yerleştir', async () => {
           // Yükleme arka planda sürerken tıklama işe yaramıyor: yerleşene kadar tekrar dene.
@@ -152,8 +152,17 @@ module.exports = {
           const placed = fr.getByText(/^[1-9]\d* Images?$/).first();
           const deadline = Date.now() + 90000;
           await page.waitForTimeout(3000);
+          // Yarı saydam pikselli görsellerde "Transparent Warning" penceresi çıkıyor: uyarıyı not et, Continue ile devam et
+          const transparentWarn = fr.getByText('Transparent Warning');
           while (!(await placed.isVisible())) {
             if (Date.now() > deadline) throw new Error('Görsel sheet\'e yerleştirilemedi');
+            if (await transparentWarn.isVisible()) {
+              notes.push('Builder "Transparent Warning" verdi: görselde yarı saydam pikseller var');
+              hooks.onWarning?.('Transparent Warning: yarı saydam pikseller');
+              await fr.getByRole('button', { name: /^continue$/i }).click().catch(() => {});
+              await page.waitForTimeout(3000);
+              continue;
+            }
             await fr.getByText(fileLabel(file)).first().click().catch(() => {});
             await page.waitForTimeout(6000);
           }
