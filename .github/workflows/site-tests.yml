@@ -22,7 +22,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      # Test dosyası kütüphanesi (fixtures/kutuphane, ~100 MB) her saat indirilmesin
       - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            .github
+            sites
+            fixtures/genel
+            fixtures/builder
 
       - uses: actions/setup-node@v4
         with:
