@@ -1,0 +1,295 @@
+// Site test çalıştırıcı – birden fazla siteyi test eder, tek rapor üretir.
+// Kullanım: node run.js [--mode hourly|full] [--sites fastdtftransfer,fastdtfsupply] [--only <akış-id>] [--fail-demo]
+//   hourly: ana fonksiyonlar + upload akışları; sadece durum değişince mail (yeni sorun / düzeldi)
+//   full:   hourly + ana sayfadaki tüm site içi linkler; her zaman genel rapor maili
+// WEBHOOK_URL tanımlıysa sonuç Make webhook'una POST edilir.
+const fs = require('fs');
+const path = require('path');
+const { chromium } = require('playwright');
+
+const args = process.argv.slice(2);
+const arg = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : def; };
+const MODE = arg('mode', 'hourly');
+const SITES = arg('sites', 'fastdtftransfer,fastdtfsupply').split(',');
+const ONLY = arg('only');
+const FAIL_DEMO = args.includes('--fail-demo');
+const OUT = path.join(__dirname, 'results');
+const STATE = path.join(OUT, 'state.json');
+const DEBUG = !!process.env.DEBUG;
+
+// Test görselleri: fixtures/<grup>/ klasöründen (ör. builder, genel); yoksa fixtures/ kökünden.
+// Bir grupta birden fazla görsel varsa her çalıştırmada sıradaki kullanılır.
+const listImages = dir => fs.existsSync(dir)
+  ? fs.readdirSync(dir).filter(f => /\.(png|jpe?g|webp)$/i.test(f)).sort().map(f => path.join(dir, f)) : [];
+let fixtureIdx = Math.floor(Date.now() / 3600000);
+const nextFixture = group => {
+  const files = listImages(path.join(__dirname, 'fixtures', group || 'genel'));
+  const pool = files.length ? files : listImages(path.join(__dirname, 'fixtures'));
+  return pool[fixtureIdx++ % pool.length];
+};
+
+const withTimeout = (promise, ms, label) => {
+  let timer;
+  const t = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`${label}: ${ms / 1000}s içinde bitmedi`)), ms); });
+  return Promise.race([promise, t]).finally(() => clearTimeout(timer));
+};
+const shot = async page => (await page.screenshot({ type: 'jpeg', quality: 55 }).catch(() => null))?.toString('base64') || null;
+const getCart = page => withTimeout(page.evaluate(() => fetch('/cart.js').then(r => r.json())), 15000, 'Sepet okuma');
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+async function newPage(browser) {
+  const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'en-US' });
+  // Pazarlama/analitik scriptleri test edilen akışların parçası değil: yüklenmesinler.
+  // Klaviyo pop-up'ı ("Sign Up & Get 20% Off") butonların önünü kapatıyor, takip pikselleri de sayfayı yavaşlatıyor.
+  await ctx.route(/klaviyo\.com|pinterest\.com|clarity\.ms|doubleclick\.net|google-analytics|googletagmanager|analytics\.google|merchant-center-analytics|facebook\.(com|net)|tiktok|bing\.com/, route => route.abort());
+  const page = await ctx.newPage();
+  // Pazarlama pop-up'ları testi bloklamasın
+  await page.addLocatorHandler(page.locator('button.klaviyo-close-form').first(), async l => { await l.click({ force: true, timeout: 3000 }).catch(() => {}); }, { noWaitAfter: true });
+  await page.addInitScript(() => {
+    const s = document.createElement('style');
+    // Judge.me kartları ve Klaviyo e-posta pop-up'ı ("Sign Up & Get 20% Off") butonların önünü kapatıyor
+    s.textContent = '.jdgm-popup-card{display:none!important}'
+      + ' div[role=dialog][aria-label="POPUP Form"],div.needsclick[class*="kl-private-reset-css"][role=dialog]{display:none!important}';
+    document.documentElement.appendChild(s);
+  });
+  const jsErrors = [];
+  page.on('pageerror', e => jsErrors.push(e.message.slice(0, 200)));
+  page.setDefaultTimeout(45000);
+  return { ctx, page, jsErrors };
+}
+
+// 429 = Shopify hız sınırı: hata değil, bekleyip tekrar dene
+async function gotoOk(page, url, opts = {}) {
+  for (let attempt = 1; ; attempt++) {
+    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000, ...opts });
+    const status = resp ? resp.status() : 0;
+    if (status === 429 && attempt < 3) { await page.waitForTimeout(20000); continue; }
+    if (status === 0 || (status >= 400 && status !== 429)) throw new Error(`HTTP ${status || 'yanıt yok'}`);
+    return status;
+  }
+}
+
+// Ana fonksiyonlar: ana sayfa → arama → ürün + sepete ekle → sepet → checkout butonu
+function coreFlow(site) {
+  return {
+    id: 'core', title: 'Ana fonksiyonlar (arama, sepete ekle, checkout)', url: site.base + '/',
+    async run(page, step, file, notes, result) {
+      await step('Ana sayfa', async () => {
+        const s = Date.now();
+        await gotoOk(page, site.base + '/', { waitUntil: 'load' });
+        result.homepageMs = Date.now() - s;
+      });
+      await step('Arama', async () => {
+        await gotoOk(page, `${site.base}/search?q=${encodeURIComponent(site.core.search)}`);
+        await page.locator('a[href*="/products/"]').filter({ visible: true }).first().waitFor({ timeout: 20000 });
+      });
+      let product;
+      await step('Ürün sayfası', async () => {
+        for (const h of site.core.products) {
+          const p = await page.evaluate(h => fetch(`/products/${h}.js`).then(r => r.ok ? r.json() : null).catch(() => null), h);
+          if (p && p.available) { product = p; break; }
+          notes.push(`Test ürünü stokta yok veya bulunamadı: ${h}`);
+        }
+        if (!product) throw new Error('Test ürünlerinin hiçbiri stokta değil');
+        result.url = `${site.base}/products/${product.handle}`;
+        await gotoOk(page, result.url);
+      });
+      await step('Add to cart butonu', async () => {
+        // Sayfada önerilen ürünlerin de butonu olabilir: önce ana ürünün formundaki butonu kullan
+        const ids = product.variants.map(v => `input[name="id"][value="${v.id}"]`).join(',');
+        const main = page.locator('form[action*="/cart/add"]').filter({ has: page.locator(ids) })
+          .getByRole('button', { name: /add to cart/i }).filter({ visible: true });
+        const any = page.getByRole('button', { name: /add to cart/i }).filter({ visible: true });
+        const btn = ((await main.count()) ? main : any).first();
+        // Sayfa scriptleri hazır olmadan basılan tıklama boşa gidebiliyor: 10 sn'de eklenmezse bir kez daha bas
+        await page.waitForTimeout(2000);
+        await btn.click();
+        const deadline = Date.now() + 20000;
+        let item, reclicked = false;
+        while (!item && Date.now() < deadline) {
+          await page.waitForTimeout(1500);
+          item = (await getCart(page).catch(() => null))?.items?.find(i => i.product_id === product.id);
+          if (!item && !reclicked && Date.now() > deadline - 10000) { reclicked = true; await btn.click().catch(() => {}); }
+        }
+        if (!item) throw new Error('Ürün sepete eklenmedi');
+        result.cart = { variant: product.title.slice(0, 40), price: (item.final_line_price / 100).toFixed(2) };
+      });
+      await step('Sepet sayfası', async () => {
+        await gotoOk(page, `${site.base}/cart`);
+        await page.getByText(new RegExp(escRe(product.title.slice(0, 25)), 'i')).filter({ visible: true }).first().waitFor({ timeout: 20000 });
+      });
+      await step('Checkout butonu', async () => {
+        const btn = page.locator('[name=checkout], button:has-text("Checkout"), a:has-text("Checkout")').filter({ visible: true }).first();
+        await Promise.all([page.waitForURL(/checkouts|authentication|account\./, { timeout: 45000 }), btn.click()]);
+        result.checkout = page.url().includes('/checkouts/') ? 'Ödeme sayfası açıldı' : 'Müşteri giriş sayfası açıldı';
+      });
+    },
+  };
+}
+
+async function runFlow(browser, site, flow, demoBreak) {
+  const { ctx, page, jsErrors } = await newPage(browser);
+  const file = nextFixture(flow.fixture);
+  const result = { id: flow.id, title: flow.title, url: flow.url, ok: true, steps: [], notes: [] };
+  const t0 = Date.now();
+  const step = async (name, fn) => {
+    const s = Date.now();
+    if (DEBUG) console.log(`  … ${site.domain}/${flow.id}: ${name}`);
+    try {
+      await fn();
+      result.steps.push({ name, ok: true, ms: Date.now() - s });
+    } catch (e) {
+      result.steps.push({ name, ok: false, ms: Date.now() - s, error: e.message.split('\n')[0].slice(0, 300) });
+      throw e;
+    }
+  };
+  const uploadBody = async () => {
+    await step('Sayfa açılıyor', async () => {
+      const url = demoBreak ? flow.url + '-bozuk-test' : flow.url;
+      result.url = url; // mailde gerçekten test edilen adres görünsün
+      await gotoOk(page, url);
+      await page.waitForTimeout(3000);
+    });
+    result.file = path.basename(file);
+    await flow.run(page, step, file, result.notes);
+    let item;
+    await step('Sepet doğrulama', async () => {
+      const deadline = Date.now() + 25000;
+      while (Date.now() < deadline) {
+        const cart = await getCart(page).catch(() => null);
+        item = cart?.items?.find(i => i.product_title.includes(flow.expectProduct));
+        if (item) break;
+        await page.waitForTimeout(1500);
+      }
+      if (!item) throw new Error(`Ürün sepete düşmedi (${flow.expectProduct})`);
+      if (!item.properties?.[flow.fileProp]) throw new Error(`Sepette yüklenen dosya bilgisi yok (${flow.fileProp})`);
+      result.cart = { variant: item.variant_title, price: (item.final_line_price / 100).toFixed(2) };
+    });
+    await step('Baskı dosyası erişilebilir', async () => {
+      const res = await fetch(item.properties[flow.fileProp], { redirect: 'follow', signal: AbortSignal.timeout(30000) });
+      res.body?.cancel().catch(() => {});
+      if (res.status >= 400) throw new Error(`Dosya linki HTTP ${res.status}`);
+    });
+    await step('Sepet sayfası', async () => {
+      await gotoOk(page, `${site.base}/cart`);
+      await page.getByText(new RegExp(escRe(flow.expectProduct), 'i')).filter({ visible: true }).first().waitFor({ timeout: 20000 });
+    });
+  };
+  try {
+    // Hiçbir akış 4 dakikadan uzun sürmesin
+    await withTimeout(flow.id === 'core' ? flow.run(page, step, file, result.notes, result) : uploadBody(), 240000, 'Akış');
+  } catch (e) {
+    result.ok = false;
+    if (!result.steps.some(s => !s.ok)) {
+      const last = result.steps.length ? result.steps[result.steps.length - 1].name : '-';
+      result.steps.push({ name: `Zaman aşımı (son başarılı adım: ${last})`, ok: false, error: e.message.split('\n')[0] });
+    }
+    result.screenshot = await withTimeout(shot(page), 15000, 'shot').catch(() => null);
+  }
+  result.ms = Date.now() - t0;
+  if (jsErrors.length) result.jsErrors = [...new Set(jsErrors)].slice(0, 5);
+  await withTimeout(ctx.close(), 15000, 'close').catch(() => {});
+  return result;
+}
+
+// Ana sayfadaki tüm site içi linkler (sadece full modda)
+async function linkCheck(browser, site) {
+  const { ctx, page } = await newPage(browser);
+  try {
+    await gotoOk(page, site.base + '/');
+    const links = await withTimeout(page.evaluate(async () => {
+      const links = [...new Set([...document.querySelectorAll('a[href]')].map(a => a.href.split('#')[0])
+        .filter(h => h.startsWith(location.origin) && !/\/account|customer_authentication|\/cart|\/checkout/.test(h)))];
+      const broken = [];
+      for (const l of links) {
+        // 5xx/429 geçici olabilir: bekleyip bir kez daha dene
+        let status;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try { status = (await fetch(l, { redirect: 'follow' })).status; } catch (e) { status = 'hata'; }
+          if (status !== 'hata' && status < 429) break;
+          await new Promise(r => setTimeout(r, 3000));
+        }
+        if (status === 'hata' || (status >= 400 && status !== 429)) broken.push({ url: l, status });
+        await new Promise(r => setTimeout(r, 300));
+      }
+      return { total: links.length, broken };
+    }), 600000, 'Link kontrolü');
+    return { ...links, ok: links.broken.length === 0 };
+  } catch (e) {
+    return { ok: false, total: 0, broken: [], error: e.message.split('\n')[0] };
+  } finally {
+    await withTimeout(ctx.close(), 15000, 'close').catch(() => {});
+  }
+}
+
+async function testSite(browser, site, isFirstSite) {
+  const flows = [];
+  const all = [coreFlow(site), ...site.flows].filter(f => !ONLY || f.id === ONLY);
+  for (const flow of all) {
+    const demoBreak = FAIL_DEMO && isFirstSite && flow === all.find(f => f.id !== 'core');
+    let r = await runFlow(browser, site, flow, demoBreak);
+    // Geçici bir aksaklığı hata saymamak için başarısız akışı bir kez tekrar dene
+    if (!r.ok && !demoBreak) {
+      const first = r.steps.find(s => !s.ok);
+      // İlk denemedeki takılmanın ekran görüntüsünü sakla (geçici aksaklık mı, gerçek sorun mu incelemek için)
+      if (r.screenshot) fs.writeFileSync(path.join(OUT, `ilk-deneme-${site.domain}-${flow.id}-${Date.now()}.jpg`), Buffer.from(r.screenshot, 'base64'));
+      console.log(`  ↻ ${site.domain}/${flow.id} ilk denemede takıldı (${first?.name}: ${first?.error}), tekrar deneniyor`);
+      const retry = await runFlow(browser, site, flow, false);
+      retry.retried = true;
+      retry.firstAttempt = { step: first?.name, error: first?.error };
+      r = retry;
+    }
+    flows.push(r);
+    const bad = r.steps.find(s => !s.ok);
+    console.log(`${r.ok ? '✅' : '❌'} ${site.domain} – ${r.title} (${(r.ms / 1000).toFixed(1)}s)` + (bad ? ` → ${bad.name}: ${bad.error}` : ''));
+  }
+  const links = MODE === 'full' && !ONLY ? await linkCheck(browser, site) : null;
+  if (links) console.log(`${links.ok ? '✅' : '⚠️'} ${site.domain} – linkler: ${links.broken.length}/${links.total} kırık`);
+  return { name: site.name, domain: site.domain, base: site.base, flows, links, ok: flows.every(f => f.ok) && (!links || links.ok) };
+}
+
+(async () => {
+  const startedAt = new Date().toISOString();
+  const t0 = Date.now();
+  const browser = await chromium.launch();
+  const sites = [];
+  for (const [i, name] of SITES.entries()) sites.push(await testSite(browser, require(`./sites/${name}`), i === 0));
+  await browser.close();
+
+  // Önceki duruma göre yeni sorunlar ve düzelenler
+  fs.mkdirSync(OUT, { recursive: true });
+  let prev = {};
+  try { prev = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) {}
+  const now = {};
+  const newFailures = [], recovered = [], ongoing = [];
+  for (const s of sites) for (const f of s.flows) {
+    const key = `${s.domain}/${f.id}`;
+    if (!f.ok) {
+      now[key] = { since: prev[key]?.since || startedAt };
+      (prev[key] ? ongoing : newFailures).push({ site: s.domain, flow: f.title, since: now[key].since });
+    } else if (prev[key]) {
+      recovered.push({ site: s.domain, flow: f.title, since: prev[key].since });
+    }
+  }
+  if (!FAIL_DEMO && !ONLY) fs.writeFileSync(STATE, JSON.stringify(now, null, 1));
+
+  const run = {
+    mode: MODE, startedAt, ms: Date.now() - t0, demo: FAIL_DEMO, sites,
+    ok: sites.every(s => s.ok),
+    critical: sites.some(s => s.flows.some(f => !f.ok)),
+    alert: { newFailures, recovered, ongoing },
+  };
+  const stamp = startedAt.replace(/[:.]/g, '-');
+  const file = path.join(OUT, `${MODE}-${stamp}.json`);
+  fs.writeFileSync(file, JSON.stringify(run, null, 1));
+
+  const report = require('./report').build(run);
+  fs.writeFileSync(file.replace(/\.json$/, '.html'), report.html);
+  console.log(`Sonuç: ${run.ok ? 'SORUN YOK' : 'SORUN VAR'} · mail: ${report.sendEmail ? report.subject : 'gönderilmeyecek'} → ${file}`);
+
+  if (process.env.WEBHOOK_URL) {
+    const payload = { ...report, mode: MODE, ok: run.ok, critical: run.critical, startedAt, alert: run.alert };
+    const r = await fetch(process.env.WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    console.log(`Make webhook: HTTP ${r.status}`);
+  }
+})();

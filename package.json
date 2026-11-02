@@ -1,0 +1,12 @@
+{
+  "name": "site-test-agent",
+  "private": true,
+  "description": "E-ticaret siteleri için otomatik test (Playwright)",
+  "scripts": {
+    "hourly": "node run.js --mode hourly",
+    "full": "node run.js --mode full"
+  },
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}
