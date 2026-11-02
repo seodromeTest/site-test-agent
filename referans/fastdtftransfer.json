@@ -1,44 +1,8 @@
 {
  "site": "fastdtftransfer.com",
- "kaynak": "2026-11-02T11:44:03.805Z",
+ "kaynak": "2026-11-02T12:14:34.088Z",
  "onaylandi": false,
  "hucreler": {
-  "upload-gang-sheet|builder_25dpi_dusuk.png": {
-   "durum": "ok",
-   "olcu": "15.55\" × 56.61\"",
-   "dpi": "25",
-   "varyant": "22\"x60\"",
-   "fiyat": "30.00",
-   "sepetVaryant": "22\"x60\"",
-   "sepetFiyat": "30.00"
-  },
-  "upload-gang-sheet|builder_72dpi_29.8in_genis.png": {
-   "durum": "ok",
-   "olcu": "10.18\" × 29.80\"",
-   "dpi": "72",
-   "varyant": "22\"x30\"",
-   "fiyat": "15.00",
-   "sepetVaryant": "22\"x30\"",
-   "sepetFiyat": "15.00"
-  },
-  "upload-gang-sheet|builder_dpiyok_1663x946.png": {
-   "durum": "ok",
-   "olcu": "13.14\" × 23.10\"",
-   "dpi": "72",
-   "varyant": "22\"x24\"",
-   "fiyat": "12.00",
-   "sepetVaryant": "22\"x24\"",
-   "sepetFiyat": "12.00"
-  },
-  "upload-gang-sheet|builder_dpiyok_1774x887.png": {
-   "durum": "ok",
-   "olcu": "12.32\" × 24.64\"",
-   "dpi": "72",
-   "varyant": "22\"x30\"",
-   "fiyat": "15.00",
-   "sepetVaryant": "22\"x30\"",
-   "sepetFiyat": "15.00"
-  },
   "upload-gang-sheet|gangsheet_22.5x56in_300dpi_sinirda.png": {
    "durum": "ok",
    "olcu": "22.50\" × 56\"",
@@ -57,118 +21,6 @@
    "sepetVaryant": "22\"x48\"",
    "sepetFiyat": "24.00"
   },
-  "upload-gang-sheet|ozel_22.5x10.2in_300dpi_cmyk.tif": {
-   "durum": "hata",
-   "hata": "Uygulama \"Upload failed\" dedi (ölçü okunamadı)"
-  },
-  "upload-gang-sheet|ozel_22.5x9in_300dpi_cmyk.tif": {
-   "durum": "hata",
-   "hata": "Uygulama \"Upload failed\" dedi (ölçü okunamadı)"
-  },
-  "upload-gang-sheet|tasarim_25dpi_626x625_dusuk.png": {
-   "durum": "hata",
-   "dpi": "25",
-   "hata": "Uygulama \"Upload failed\" dedi (ölçü okunamadı)"
-  },
-  "upload-gang-sheet|tasarim_dpiyok_1312x1199_seffaf.png": {
-   "durum": "ok",
-   "olcu": "16.65\" × 18.22\"",
-   "dpi": "72",
-   "varyant": "22\"x18\"",
-   "fiyat": "9.00",
-   "sepetVaryant": "22\"x18\"",
-   "sepetFiyat": "9.00"
-  },
-  "upload-gang-sheet|tasarim_dpiyok_1440x1440_seffaf.png": {
-   "durum": "ok",
-   "olcu": "20\" × 20\"",
-   "dpi": "72",
-   "varyant": "22\"x24\"",
-   "fiyat": "12.00",
-   "sepetVaryant": "22\"x24\"",
-   "sepetFiyat": "12.00"
-  },
-  "upload-gang-sheet|tasarim_dpiyok_2689x4034_seffaf.png": {
-   "durum": "ok",
-   "olcu": "22.50\" × 33.75\"",
-   "dpi": "120",
-   "varyant": "22\"x36\"",
-   "fiyat": "18.00",
-   "sepetVaryant": "22\"x36\"",
-   "sepetFiyat": "18.00"
-  },
-  "upload-gang-sheet|tasarim_dpiyok_2974x4461_arkaplanli.png": {
-   "durum": "ok",
-   "olcu": "22.50\" × 33.75\"",
-   "dpi": "132",
-   "varyant": "22\"x36\"",
-   "fiyat": "18.00",
-   "sepetVaryant": "22\"x36\"",
-   "sepetFiyat": "18.00"
-  },
-  "upload-gang-sheet|tasarim_dpiyok_2979x2979_arkaplanli.png": {
-   "durum": "ok",
-   "olcu": "22.50\" × 22.50\"",
-   "dpi": "132",
-   "varyant": "22\"x24\"",
-   "fiyat": "12.00",
-   "sepetVaryant": "22\"x24\"",
-   "sepetFiyat": "12.00"
-  },
-  "upload-gang-sheet|tasarim_dpiyok_2995x2976_seffaf.png": {
-   "durum": "ok",
-   "olcu": "22.50\" × 22.64\"",
-   "dpi": "132",
-   "varyant": "22\"x24\"",
-   "fiyat": "12.00",
-   "sepetVaryant": "22\"x24\"",
-   "sepetFiyat": "12.00"
-  },
-  "upload-gang-sheet|tasarim_dpiyok_800x800_arkaplanli.png": {
-   "durum": "ok",
-   "olcu": "11.11\" × 11.11\"",
-   "dpi": "72",
-   "varyant": "22\"x12\"",
-   "fiyat": "6.00",
-   "sepetVaryant": "22\"x12\"",
-   "sepetFiyat": "6.00"
-  },
-  "custom-dtf-transfer|builder_25dpi_dusuk.png": {
-   "durum": "ok",
-   "olcu": "15.8\" × 57.5\"",
-   "dpi": "25",
-   "varyant": "22\"x60\"",
-   "fiyat": "30.00",
-   "sepetVaryant": "22\"x60\"",
-   "sepetFiyat": "30.00"
-  },
-  "custom-dtf-transfer|builder_72dpi_29.8in_genis.png": {
-   "durum": "ok",
-   "olcu": "10.2\" × 29.8\"",
-   "dpi": "72",
-   "varyant": "22\"x30\"",
-   "fiyat": "15.00",
-   "sepetVaryant": "22\"x30\"",
-   "sepetFiyat": "15.00"
-  },
-  "custom-dtf-transfer|builder_dpiyok_1663x946.png": {
-   "durum": "ok",
-   "olcu": "5.5\" × 3.2\"",
-   "dpi": "300",
-   "varyant": "22\"x6\"",
-   "fiyat": "3.00",
-   "sepetVaryant": "22\"x6\"",
-   "sepetFiyat": "3.00"
-  },
-  "custom-dtf-transfer|builder_dpiyok_1774x887.png": {
-   "durum": "ok",
-   "olcu": "5.9\" × 3.0\"",
-   "dpi": "300",
-   "varyant": "22\"x6\"",
-   "fiyat": "3.00",
-   "sepetVaryant": "22\"x6\"",
-   "sepetFiyat": "3.00"
-  },
   "custom-dtf-transfer|gangsheet_22.5x56in_300dpi_sinirda.png": {
    "durum": "ok",
    "olcu": "22.5\" × 56.0\"",
@@ -186,79 +38,6 @@
    "fiyat": "24.00",
    "sepetVaryant": "22\"x48\"",
    "sepetFiyat": "24.00"
-  },
-  "custom-dtf-transfer|ozel_22.5x10.2in_300dpi_cmyk.tif": {
-   "durum": "desteklenmiyor"
-  },
-  "custom-dtf-transfer|ozel_22.5x9in_300dpi_cmyk.tif": {
-   "durum": "desteklenmiyor"
-  },
-  "custom-dtf-transfer|tasarim_25dpi_626x625_dusuk.png": {
-   "durum": "hata",
-   "hata": "Ürün sepete düşmedi"
-  },
-  "custom-dtf-transfer|tasarim_dpiyok_1312x1199_seffaf.png": {
-   "durum": "ok",
-   "olcu": "4.4\" × 4.0\"",
-   "dpi": "300",
-   "varyant": "22\"x6\"",
-   "fiyat": "3.00",
-   "sepetVaryant": "22\"x6\"",
-   "sepetFiyat": "3.00"
-  },
-  "custom-dtf-transfer|tasarim_dpiyok_1440x1440_seffaf.png": {
-   "durum": "ok",
-   "olcu": "4.8\" × 4.8\"",
-   "dpi": "300",
-   "varyant": "22\"x6\"",
-   "fiyat": "3.00",
-   "sepetVaryant": "22\"x6\"",
-   "sepetFiyat": "3.00"
-  },
-  "custom-dtf-transfer|tasarim_dpiyok_2689x4034_seffaf.png": {
-   "durum": "ok",
-   "olcu": "13.4\" × 9.0\"",
-   "dpi": "300",
-   "varyant": "22\"x12\"",
-   "fiyat": "6.00",
-   "sepetVaryant": "22\"x12\"",
-   "sepetFiyat": "6.00"
-  },
-  "custom-dtf-transfer|tasarim_dpiyok_2974x4461_arkaplanli.png": {
-   "durum": "ok",
-   "olcu": "14.9\" × 9.9\"",
-   "dpi": "300",
-   "varyant": "22\"x12\"",
-   "fiyat": "6.00",
-   "sepetVaryant": "22\"x12\"",
-   "sepetFiyat": "6.00"
-  },
-  "custom-dtf-transfer|tasarim_dpiyok_2979x2979_arkaplanli.png": {
-   "durum": "ok",
-   "olcu": "9.9\" × 9.9\"",
-   "dpi": "300",
-   "varyant": "22\"x12\"",
-   "fiyat": "6.00",
-   "sepetVaryant": "22\"x12\"",
-   "sepetFiyat": "6.00"
-  },
-  "custom-dtf-transfer|tasarim_dpiyok_2995x2976_seffaf.png": {
-   "durum": "ok",
-   "olcu": "10.0\" × 9.9\"",
-   "dpi": "300",
-   "varyant": "22\"x12\"",
-   "fiyat": "6.00",
-   "sepetVaryant": "22\"x12\"",
-   "sepetFiyat": "6.00"
-  },
-  "custom-dtf-transfer|tasarim_dpiyok_800x800_arkaplanli.png": {
-   "durum": "ok",
-   "olcu": "2.7\" × 2.7\"",
-   "dpi": "300",
-   "varyant": "22\"x6\"",
-   "fiyat": "3.00",
-   "sepetVaryant": "22\"x6\"",
-   "sepetFiyat": "3.00"
   },
   "dtf-transfers-by-size|builder_25dpi_dusuk.png": {
    "durum": "ok",
@@ -291,28 +70,6 @@
    "fiyat": "0.97",
    "sepetVaryant": "Up to 19 in² print · 0.97 each, was 1.02 / No - Leave in a roll",
    "sepetFiyat": "0.97"
-  },
-  "dtf-transfers-by-size|gangsheet_22.5x56in_300dpi_sinirda.png": {
-   "durum": "ok",
-   "olcu": "22.24\" × 55.42\"",
-   "dpi": "300",
-   "fiyat": "35.78",
-   "sepetVaryant": "Up to 1320 in² print · 35.78 each, was 55.05 / No - Leave in a roll",
-   "sepetFiyat": "35.78"
-  },
-  "dtf-transfers-by-size|gangsheet_22x48in_300dpi.png": {
-   "durum": "ok",
-   "olcu": "22\" × 47.94\"",
-   "dpi": "300",
-   "fiyat": "35.78",
-   "sepetVaryant": "Up to 1056 in² print · 35.78 each, was 55.05 / No - Leave in a roll",
-   "sepetFiyat": "35.78"
-  },
-  "dtf-transfers-by-size|ozel_22.5x10.2in_300dpi_cmyk.tif": {
-   "durum": "desteklenmiyor"
-  },
-  "dtf-transfers-by-size|ozel_22.5x9in_300dpi_cmyk.tif": {
-   "durum": "desteklenmiyor"
   },
   "dtf-transfers-by-size|tasarim_25dpi_626x625_dusuk.png": {
    "durum": "ok",
@@ -413,30 +170,6 @@
    "fiyat": "3.00",
    "sepetVaryant": "22\"x6\"",
    "sepetFiyat": "3.00"
-  },
-  "gang-sheet-builder|gangsheet_22.5x56in_300dpi_sinirda.png": {
-   "durum": "ok",
-   "olcu": "2.31\" × 5.75\"",
-   "dpi": "2897",
-   "varyant": "22\"x6\"",
-   "fiyat": "3.00",
-   "sepetVaryant": "22\"x6\"",
-   "sepetFiyat": "3.00"
-  },
-  "gang-sheet-builder|gangsheet_22x48in_300dpi.png": {
-   "durum": "ok",
-   "olcu": "2.64\" × 5.75\"",
-   "dpi": "2502",
-   "varyant": "22\"x6\"",
-   "fiyat": "3.00",
-   "sepetVaryant": "22\"x6\"",
-   "sepetFiyat": "3.00"
-  },
-  "gang-sheet-builder|ozel_22.5x10.2in_300dpi_cmyk.tif": {
-   "durum": "desteklenmiyor"
-  },
-  "gang-sheet-builder|ozel_22.5x9in_300dpi_cmyk.tif": {
-   "durum": "desteklenmiyor"
   },
   "gang-sheet-builder|tasarim_25dpi_626x625_dusuk.png": {
    "durum": "ok",
