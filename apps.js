@@ -149,7 +149,10 @@ const builder = () => ({
   async run(page, step, file, notes, hooks = {}) {
     const fr = page.frameLocator('iframe[src*="dripappsserver.com/builder"]');
     await step('Builder açılıyor', async () => {
-      await page.getByText(/^Build your own Gang Sheet$|^Build Gang Sheet$|^Create Gang Sheet$|^Start Building$/i).filter({ visible: true }).first().click();
+      // Buton metni ürüne göre değişebilir; birebir metinle ara (regex ^…$ bu butonla eşleşmiyor)
+      const btn = ['Build your own Gang Sheet', 'Build Gang Sheet', 'Create Gang Sheet', 'Start Building']
+        .map(t => page.getByText(t, { exact: true })).reduce((a, b) => a.or(b));
+      await btn.first().click();
       await fr.getByText('Start a Brand New Gang Sheet').click({ timeout: 60000 });
     });
     await step('Upload', async () => {
