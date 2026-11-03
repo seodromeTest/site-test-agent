@@ -107,7 +107,8 @@ const gsStudio = ({ input = 'input.i2s-hidden, #gs-i2s-file-input, input[type=fi
       await fileInput.setInputFiles(file);
       // Fiyat hesaplanamazsa uygulama "Pricing is unavailable" ya da "Too many requests" (hız sınırı) gösteriyor
       // ve Add to cart kapanıyor. Hız sınırında uygulamanın kendi Retry butonuyla 2 kez tekrar dene.
-      const priced = page.getByText(/\$[0-9.]+ each/).filter({ visible: true }).first();
+      // Fiyat "…$2.30 each" ya da Basic sürümde "$0.26 × 1 = $0.26" şeklinde yazıyor
+      const priced = page.getByText(/\$[0-9.]+ each|× \d+ = \$[0-9.]+/).filter({ visible: true }).first();
       const noPrice = page.getByText(/Pricing is unavailable/i).filter({ visible: true }).first();
       const tooMany = page.getByText(/Too many requests|server is busy/i).filter({ visible: true }).first();
       for (let attempt = 0; ; attempt++) {
@@ -125,7 +126,16 @@ const gsStudio = ({ input = 'input.i2s-hidden, #gs-i2s-file-input, input[type=fi
       // Önce uygulamanın kendi butonu; yoksa (eski sürüm) görünen ilk Add to cart
       const own = page.locator('button.i2s-add').filter({ visible: true }).first();
       const btn = (await own.count()) ? own : page.getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first();
+      // Bazı mağazalarda kalite kontrol penceresi (PressCheck) açılıyor: "Continue" ile geç
+      const pressCheck = page.getByRole('button', { name: /^continue$/i }).filter({ visible: true }).first();
+      if (await pressCheck.isVisible().catch(() => false)) { notes.push('PressCheck kalite penceresi açıldı, Continue ile geçildi'); await pressCheck.click(); }
       await btn.click();
+      await page.waitForTimeout(2000);
+      if (await pressCheck.isVisible().catch(() => false)) {
+        notes.push('PressCheck kalite penceresi açıldı, Continue ile geçildi');
+        await pressCheck.click();
+        if (await btn.isVisible().catch(() => false) && !/\/cart/.test(page.url())) await btn.click().catch(() => {});
+      }
       // GS Studio sepeti doğrulayamazsa "Shopify did not return a cart that GS-STUDIO could verify" diyor
       const cartErr = page.getByText(/did not return a cart|Nothing new was added/i).filter({ visible: true }).first();
       await page.waitForURL(/\/cart/, { timeout: 15000 }).catch(() => {});
