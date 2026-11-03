@@ -133,7 +133,14 @@ async function runFlow(browser, site, flow, demoBreak) {
       if (res.status >= 400) throw new Error(`Dosya linki HTTP ${res.status}`);
     });
     await step('Sepet sayfası', async () => {
-      await gotoOk(page, `${site.base}/cart`);
+      // Bazı uygulamalar (ör. builder) sepete ekledikten sonra kendisi /cart'a yönlendiriyor: çakışmasın
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
+      if (!new URL(page.url()).pathname.startsWith('/cart')) {
+        await gotoOk(page, `${site.base}/cart`).catch(async e => {
+          if (!/interrupted by another navigation/.test(e.message)) throw e;
+          await page.waitForLoadState('domcontentloaded').catch(() => {});
+        });
+      }
       // Bazı ürün adlarında çift boşluk var; sayfada tek boşluk olarak görünüyor
       const name = new RegExp(escRe(flow.expectProduct).replace(/\s+/g, '\\s+'), 'i');
       await page.getByText(name).filter({ visible: true }).first().waitFor({ timeout: 20000 });
