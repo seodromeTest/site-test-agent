@@ -8,8 +8,9 @@ const shot = async page => (await page.screenshot({ type: 'jpeg', quality: 55 })
 const getCart = page => withTimeout(page.evaluate(() => fetch('/cart.js').then(r => r.json())), 15000, 'Sepet okuma');
 const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-async function newPage(browser) {
-  const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 }, locale: 'en-US' });
+// opts: newContext seçenekleri (ör. telefon görünümü için devices['iPhone 13'])
+async function newPage(browser, opts) {
+  const ctx = await browser.newContext(opts || { viewport: { width: 1366, height: 900 }, locale: 'en-US' });
   // Pazarlama/analitik scriptleri test edilen akışların parçası değil: yüklenmesinler.
   // Klaviyo pop-up'ı ("Sign Up & Get 20% Off") butonların önünü kapatıyor, takip pikselleri de sayfayı yavaşlatıyor.
   await ctx.route(/klaviyo\.com|pinterest\.com|clarity\.ms|doubleclick\.net|google-analytics|googletagmanager|analytics\.google|merchant-center-analytics|facebook\.(com|net)|tiktok|bing\.com/, route => route.abort());

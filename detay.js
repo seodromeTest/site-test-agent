@@ -69,6 +69,6 @@ function linkRows(links) {
   });
 }
 
-const siteRows = s => [...s.flows.flatMap(flowRows), ...linkRows(s.links)];
+const siteRows = s => [...s.flows.flatMap(flowRows), ...(s.genel || linkRows(s.links))];
 
 module.exports = { siteRows };
