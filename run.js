@@ -238,9 +238,18 @@ async function testSite(browser, site, isFirstSite) {
     const bad = r.steps.find(s => !s.ok);
     console.log(`${r.ok ? '✅' : '❌'} ${site.domain} – ${r.title} (${(r.ms / 1000).toFixed(1)}s)` + (bad ? ` → ${bad.name}: ${bad.error}` : ''));
   }
-  const links = MODE === 'full' && !ONLY ? await linkCheck(browser, site) : null;
-  if (links) console.log(`${links.ok ? '✅' : '⚠️'} ${site.domain} – linkler: ${links.broken.length}/${links.total} kırık`);
-  return { name: site.name, domain: site.domain, base: site.base, flows, links, ok: flows.every(f => f.ok) && (!links || links.ok) };
+  // Genel testte ana sayfanın tamamı: menü, banner, linkler, koleksiyonlar, footer, sosyal medya, mobil menü, chat
+  let genel = null, links = null;
+  if (MODE === 'full' && (!ONLY || ONLY.split(',').includes('genel'))) {
+    genel = await withTimeout(require('./genel').genelKontrol(browser, site), 900000, 'Genel kontrol')
+      .catch(e => [{ bolum: 'Ana sayfa', kontrol: 'Genel kontrol', adres: site.base, sonuc: `Sorun: ${e.message.split('\n')[0]}`, durum: 'hata' }]);
+    const bad = genel.filter(r => r.durum === 'hata');
+    const linkRows = genel.filter(r => r.adres && /link|Sosyal|Diğer/.test(r.bolum));
+    links = { total: linkRows.length, broken: linkRows.filter(r => r.durum === 'hata').map(r => ({ url: r.adres, status: r.sonuc })), ok: !bad.length };
+    console.log(`${bad.length ? '⚠️' : '✅'} ${site.domain} – genel kontrol: ${genel.length} satır, ${bad.length} sorun`);
+    for (const b of bad) console.log(`     ✗ ${b.bolum} | ${b.kontrol} | ${b.adres} | ${b.sonuc}`);
+  }
+  return { name: site.name, domain: site.domain, base: site.base, flows, links, genel, ok: flows.every(f => f.ok) && (!links || links.ok) };
 }
 
 (async () => {

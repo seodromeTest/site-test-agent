@@ -36,7 +36,8 @@ function siteSummaryRow(s) {
     ${td(`<b>${esc(s.domain)}</b>`)}
     ${td(core ? (core.ok ? `<span style="color:${C.ok}">✅</span>` : `<span style="color:${C.bad}">❌ ${esc(core.steps.find(x => !x.ok)?.name)}</span>`) : '—')}
     ${td(uploads.length ? `<span style="color:${upOk === uploads.length ? C.ok : C.bad};font-weight:600">${upOk}/${uploads.length}</span>` : `<span style="color:${C.muted}">upload yok</span>`)}
-    ${td(s.links ? `<span style="color:${s.links.ok ? C.ok : C.bad}">${s.links.broken.length} kırık / ${s.links.total}</span>` : '<span style="color:#6e7781">—</span>')}
+    ${td(s.genel ? (n => `<span style="color:${n ? C.bad : C.ok}">${n ? n + ' sorun' : 'sorun yok'} / ${s.genel.filter(x => x.durum === 'ok' || x.durum === 'hata').length} kontrol</span>`)(s.genel.filter(x => x.durum === 'hata').length)
+      : s.links ? `<span style="color:${s.links.ok ? C.ok : C.bad}">${s.links.broken.length} kırık / ${s.links.total}</span>` : '<span style="color:#6e7781">—</span>')}
     ${td(core?.homepageMs ? sec(core.homepageMs) : '—', 'white-space:nowrap')}
   </tr>`;
 }
@@ -59,7 +60,8 @@ function siteDetail(s) {
       head = `<tr bgcolor="#f6f8fa"><td colspan="3"><b>${esc(r.bolum)}</b>${flow && flow.id !== 'core' ? ` <a href="${esc(flow.url)}">${esc(flow.url.replace(/^https:\/\/(www\.)?/, ''))}</a>` : ''}</td></tr>`;
     }
     const num = r.durum === 'ok' || r.durum === 'hata' ? ++n : '';
-    return `${head}<tr><td>${num}</td><td>${esc(r.kontrol)}</td><td><font color="${COLOR[r.durum]}">${ICON[r.durum]} ${esc(r.sonuc)}</font></td></tr>`;
+    const adr = r.adres && !s.flows.some(f => f.title === r.bolum) ? `<br><small><font color="${C.muted}">${esc(r.adres.replace(/^https?:\/\/(www\.)?/, '').slice(0, 90))}</font></small>` : '';
+    return `${head}<tr><td>${num}</td><td>${esc(r.kontrol)}${adr}</td><td><font color="${COLOR[r.durum]}">${ICON[r.durum]} ${esc(r.sonuc)}</font></td></tr>`;
   }).join('');
   // Linkler: her biri ayrı satır yerine tek hücrede alt alta (mail boyutu küçük kalsın)
   const linkBad = linkRowsAll.filter(r => r.durum === 'hata');
@@ -113,7 +115,7 @@ function build(run) {
   <div style="color:${C.muted};font-size:13px;margin-bottom:14px">${fmtDate(run.startedAt)} · ${run.sites.length} site · Süre: ${sec(run.ms)} · gerçek tarayıcı (Chrome)</div>
 
   <table style="border-collapse:collapse;width:100%;font-size:14px">
-    <tr style="background:${C.soft};text-align:left"><th style="padding:8px 10px">Site</th><th style="padding:8px 10px">Ana fonksiyonlar</th><th style="padding:8px 10px">Upload akışları</th><th style="padding:8px 10px">Linkler</th><th style="padding:8px 10px">Ana sayfa</th></tr>
+    <tr style="background:${C.soft};text-align:left"><th style="padding:8px 10px">Site</th><th style="padding:8px 10px">Ana fonksiyonlar</th><th style="padding:8px 10px">Upload akışları</th><th style="padding:8px 10px">Genel kontroller</th><th style="padding:8px 10px">Ana sayfa</th></tr>
     ${[...badSites, ...run.sites.filter(s => s.ok)].map(siteSummaryRow).join('')}
   </table>
 
@@ -122,7 +124,7 @@ function build(run) {
   <p style="font-size:12px;color:${C.muted};margin-top:24px;border-top:1px solid ${C.line};padding-top:10px">
   <b>Ana fonksiyonlar:</b> ana sayfa, arama, ürün sayfası, Add to cart, sepet sayfası ve Checkout butonu.
   <b>Upload akışları:</b> test görseli yüklenir, sepete eklenir, sepette dosya linkinin oluştuğu ve açıldığı doğrulanır.
-  ${isFull ? '<b>Linkler:</b> ana sayfadaki tüm site içi linkler tek tek açılır. ' : ''}
+  ${isFull ? '<b>Genel kontroller:</b> ana menü (masaüstünde alt menüler, telefonda hamburger menü), banner/slider, ana sayfadaki tüm linkler ve kartlar, koleksiyonların boş olup olmadığı, footer, sosyal medya, diğer sitelere linkler, canlı destek ve telefonda yana taşma. ' : ''}
   Sipariş verilmez, ödeme yapılmaz. Hata gören test otomatik olarak bir kez daha denenir.</p>
 </div>`;
 
