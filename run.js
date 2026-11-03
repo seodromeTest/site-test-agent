@@ -137,7 +137,7 @@ async function runFlow(browser, site, flow, demoBreak) {
       await page.waitForLoadState('domcontentloaded').catch(() => {});
       if (!new URL(page.url()).pathname.startsWith('/cart')) {
         await gotoOk(page, `${site.base}/cart`).catch(async e => {
-          if (!/interrupted by another navigation/.test(e.message)) throw e;
+          if (!/interrupted by another navigation|ERR_ABORTED/.test(e.message)) throw e;
           await page.waitForLoadState('domcontentloaded').catch(() => {});
         });
       }
