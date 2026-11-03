@@ -200,6 +200,21 @@ const builder = () => ({
   },
 });
 
+// Upload uygulaması henüz test edilmeyen ürünler: sadece sayfanın açıldığı ve doğru ürünün göründüğü kontrol edilir
+const pageCheck = () => ({
+  appName: 'sayfa kontrolü – uygulama henüz testte değil',
+  noCart: true,
+  accepts: /$^/,
+  matrixFiles: /$^/,
+  async run(page, step, file, notes) {
+    await step('Ürün sayfası', async () => {
+      const h1 = (await page.locator('h1').first().innerText({ timeout: 20000 }).catch(() => '')).trim();
+      if (!h1) throw new Error('Sayfada ürün başlığı görünmüyor');
+      notes.push(`Upload uygulaması henüz otomatik testte değil; sayfa açılıyor ("${h1.slice(0, 60)}")`);
+    });
+  },
+});
+
 // Bir ürün sayfasını bir uygulamayla eşle. id = ürün handle'ı, expectProduct = sepetteki ürün başlığı.
 const product = (base, handle, title, app) => ({
   id: handle,
@@ -209,4 +224,4 @@ const product = (base, handle, title, app) => ({
   ...app,
 });
 
-module.exports = { uploadStudio, gsUploader, gsStudio, builder, product };
+module.exports = { uploadStudio, gsUploader, gsStudio, builder, pageCheck, product };
