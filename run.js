@@ -10,7 +10,8 @@ const { chromium } = require('playwright');
 const args = process.argv.slice(2);
 const arg = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : def; };
 const MODE = arg('mode', 'hourly');
-const SITES = arg('sites', 'fastdtftransfer,fastdtfsupply').split(',');
+const SITES = (arg('sites') || fs.readdirSync(path.join(__dirname, 'sites')).filter(f => f.endsWith('.js')).sort()
+  .sort((a, b) => (b.startsWith('fastdtf') - a.startsWith('fastdtf'))).map(f => f.replace(/\.js$/, '')).join(',')).split(',');
 const ONLY = arg('only');
 const FAIL_DEMO = args.includes('--fail-demo');
 const OUT = path.join(__dirname, 'results');
@@ -47,8 +48,17 @@ function coreFlow(site) {
       });
       let product;
       await step('Ürün sayfası', async () => {
-        for (const h of site.core.products) {
-          const p = await page.evaluate(h => fetch(`/products/${h}.js`).then(r => r.ok ? r.json() : null).catch(() => null), h);
+        // Test ürünü verilmemişse: stokta, upload gerektirmeyen ilk ürünü seç
+        const candidates = site.core.products || await page.evaluate(async skip => {
+          // Bölge yolu kullanan mağazalarda (ör. /en-us/) ürün listesi o yolun altında
+          const root = window.Shopify?.routes?.root || '/';
+          const list = await fetch(`${root}products.json?limit=100`).then(x => x.json()).then(j => (j && j.products) || []).catch(() => []);
+          return list.filter(p => !skip.includes(p.handle) && !/gang|upload|builder|by size|by piece|custom|sample|gift card/i.test(p.title)
+            && p.variants.some(v => v.available)).slice(0, 3).map(p => p.handle);
+        }, site.flows.map(f => f.id));
+        if (!candidates.length) { notes.push('Sepete ekleme için uygun test ürünü bulunamadı; sepet ve checkout adımları atlandı'); result.skipCart = true; return; }
+        for (const h of candidates) {
+          const p = await page.evaluate(h => fetch(`${window.Shopify?.routes?.root || '/'}products/${h}.js`).then(r => r.ok ? r.json() : null).catch(() => null), h);
           if (p && p.available) { product = p; break; }
           notes.push(`Test ürünü stokta yok veya bulunamadı: ${h}`);
         }
@@ -56,6 +66,7 @@ function coreFlow(site) {
         result.url = `${site.base}/products/${product.handle}`;
         await gotoOk(page, result.url);
       });
+      if (result.skipCart) return;
       await step('Add to cart butonu', async () => {
         // Sayfada önerilen ürünlerin de butonu olabilir: önce ana ürünün formundaki butonu kullan
         const ids = product.variants.map(v => `input[name="id"][value="${v.id}"]`).join(',');
@@ -114,6 +125,7 @@ async function runFlow(browser, site, flow, demoBreak) {
     });
     result.file = path.basename(file);
     await flow.run(page, step, file, result.notes);
+    if (flow.noCart) return; // sadece sayfa kontrolü
     let item;
     await step('Sepet doğrulama', async () => {
       const deadline = Date.now() + 25000;
