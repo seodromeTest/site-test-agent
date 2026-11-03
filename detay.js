@@ -69,6 +69,16 @@ function linkRows(links) {
   });
 }
 
-const siteRows = s => [...s.flows.flatMap(flowRows), ...(s.genel || linkRows(s.links))];
+function browserRows(s) {
+  if (!s.tarayicilar?.length) return [];
+  const rows = [{ bolum: 'Tarayıcı uyumluluğu', kontrol: 'Chrome', adres: '', sonuc: 'Yukarıdaki tüm testler Chrome ile yapıldı. Edge ve Opera da Chrome motoruyla çalışır; bu sonuçlar onlar için de geçerli', durum: 'bilgi' }];
+  for (const t of s.tarayicilar) {
+    if (t.error) { rows.push({ bolum: `${t.browser}`, kontrol: 'Tarayıcı', adres: '', sonuc: `Sorun: ${t.error}`, durum: 'hata' }); continue; }
+    for (const f of t.flows) for (const r of flowRows(f)) rows.push({ ...r, bolum: `${t.browser} – ${r.bolum}` });
+  }
+  return rows;
+}
+
+const siteRows = s => [...s.flows.flatMap(flowRows), ...(s.genel || linkRows(s.links)), ...browserRows(s)];
 
 module.exports = { siteRows };

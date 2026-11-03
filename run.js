@@ -5,7 +5,7 @@
 // WEBHOOK_URL tanımlıysa sonuç Make webhook'una POST edilir.
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require('playwright');
+const { chromium, firefox, webkit } = require('playwright');
 
 const args = process.argv.slice(2);
 const arg = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : def; };
@@ -260,6 +260,37 @@ async function testSite(browser, site, isFirstSite) {
   for (const [i, name] of SITES.entries()) sites.push(await testSite(browser, require(`./sites/${name}`), i === 0));
   await browser.close();
 
+  // Tarayıcı uyumluluğu (genel test): Firefox ve Safari motoru (WebKit) – her sitede ana akış + bir upload ürünü.
+  // Edge ve Opera Chrome motoruyla (Chromium) çalışır; Chrome sonuçları onlar için de geçerli.
+  if (MODE === 'full' && (!ONLY || ONLY.split(',').includes('tarayici'))) {
+    await Promise.all([[firefox, 'Firefox'], [webkit, 'Safari (WebKit)']].map(async ([type, label]) => {
+      let b;
+      try { b = await type.launch(); } catch (e) {
+        for (const s of sites) (s.tarayicilar ||= []).push({ browser: label, error: 'Tarayıcı başlatılamadı: ' + e.message.split('\n')[0].slice(0, 150) });
+        return;
+      }
+      for (const [i, name] of SITES.entries()) {
+        const site = require(`./sites/${name}`);
+        const out = [];
+        for (const flow of [coreFlow(site), site.flows.find(f => !f.noCart)].filter(Boolean)) {
+          let r = await runFlow(b, site, flow, false).catch(e => ({ id: flow.id, title: flow.title, url: flow.url, ok: false, steps: [{ name: 'Başlatma', ok: false, error: e.message.split('\n')[0] }], notes: [] }));
+          if (!r.ok) {
+            const first = r.steps.find(s => !s.ok);
+            const retry = await runFlow(b, site, flow, false).catch(() => null);
+            if (retry) { retry.retried = true; retry.firstAttempt = { step: first?.name, error: first?.error }; r = retry; }
+          }
+          delete r.screenshot; // rapor küçük kalsın
+          out.push(r);
+          const bad = r.steps.find(s => !s.ok);
+          console.log(`${r.ok ? '✅' : '❌'} [${label}] ${site.domain} – ${r.title}` + (bad ? ` → ${bad.name}: ${bad.error}` : ''));
+        }
+        (sites[i].tarayicilar ||= []).push({ browser: label, flows: out });
+        if (out.some(f => !f.ok)) sites[i].ok = false;
+      }
+      await withTimeout(b.close(), 30000, 'close').catch(() => {});
+    }));
+  }
+
   // Önceki duruma göre yeni sorunlar ve düzelenler
   let prev = {};
   try { prev = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) {}
@@ -300,7 +331,7 @@ async function testSite(browser, site, isFirstSite) {
     }
   }
 
-  if (process.env.WEBHOOK_URL) {
+  if (process.env.WEBHOOK_URL && !process.env.NO_MAIL) {
     const payload = { ...report, mode: MODE, ok: run.ok, critical: run.critical, startedAt, alert: run.alert };
     const r = await fetch(process.env.WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     console.log(`Make webhook: HTTP ${r.status}`);

@@ -10,6 +10,14 @@ on:
         type: choice
         options: [hourly, full]
         default: hourly
+      sites:
+        description: 'Sadece bu siteler (virgülle; boş = hepsi). Doluysa mail gönderilmez (deneme)'
+        required: false
+        default: ''
+      only:
+        description: 'Sadece bu akışlar (virgülle; ör. core,genel,tarayici). Boş = hepsi'
+        required: false
+        default: ''
 
 # Aynı anda iki tur çalışmasın (uyarı durumu karışmasın)
 concurrency:
@@ -40,7 +48,7 @@ jobs:
       - run: npm ci
 
       - name: Tarayıcıyı kur
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       # Uyarı durumu (hangi akış şu an hatalı) turlar arasında saklanır:
       # yeni sorun → ACİL mail, düzelince → "Düzeldi" maili
@@ -57,9 +65,10 @@ jobs:
           echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
 
       - name: Testleri çalıştır
-        run: node run.js --mode ${{ steps.mode.outputs.mode }}
+        run: node run.js --mode ${{ steps.mode.outputs.mode }} ${{ inputs.sites && format('--sites {0}', inputs.sites) || '' }} ${{ inputs.only && format('--only {0}', inputs.only) || '' }}
         env:
           WEBHOOK_URL: ${{ secrets.MAKE_WEBHOOK_URL }}
+          NO_MAIL: ${{ inputs.sites }}
 
       - name: Uyarı durumunu kaydet
         if: always() && hashFiles('results/state.json') != ''
