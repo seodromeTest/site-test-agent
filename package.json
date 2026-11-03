@@ -7,6 +7,7 @@
     "full": "node run.js --mode full"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "playwright": "1.63.0"
   }
 }

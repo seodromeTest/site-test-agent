@@ -43,8 +43,10 @@ function coreFlow(site) {
         result.homepageMs = Date.now() - s;
       });
       await step('Arama', async () => {
+        result.search = site.core.search;
         await gotoOk(page, `${site.base}/search?q=${encodeURIComponent(site.core.search)}`);
         await page.locator('a[href*="/products/"]').filter({ visible: true }).first().waitFor({ timeout: 20000 });
+        result.searchCount = await page.evaluate(() => new Set([...document.querySelectorAll('main a[href*="/products/"], #MainContent a[href*="/products/"]')].map(a => a.pathname)).size).catch(() => 0);
       });
       let product;
       await step('Ürün sayfası', async () => {
@@ -54,7 +56,8 @@ function coreFlow(site) {
           const root = window.Shopify?.routes?.root || '/';
           const list = await fetch(`${root}products.json?limit=100`).then(x => x.json()).then(j => (j && j.products) || []).catch(() => []);
           return list.filter(p => !skip.includes(p.handle) && !/gang|upload|builder|by size|by piece|custom|sample|gift card/i.test(p.title)
-            && p.variants.some(v => v.available)).slice(0, 3).map(p => p.handle);
+            && !/bundle|printer|shaker|dryer|press|shirt|hoodie|sweatshirt|tee\b|apparel|gildan|bella|installation/i.test(p.title + ' ' + p.product_type)
+            && p.variants.length <= 10 && p.variants.some(v => v.available && +v.price > 0 && +v.price < 150)).slice(0, 3).map(p => p.handle);
         }, site.flows.map(f => f.id));
         if (!candidates.length) { notes.push('Sepete ekleme için uygun test ürünü bulunamadı; sepet ve checkout adımları atlandı'); result.skipCart = true; return; }
         for (const h of candidates) {
@@ -64,6 +67,7 @@ function coreFlow(site) {
         }
         if (!product) throw new Error('Test ürünlerinin hiçbiri stokta değil');
         result.url = `${site.base}/products/${product.handle}`;
+        result.testProduct = product.title;
         await gotoOk(page, result.url);
       });
       if (result.skipCart) return;
@@ -92,7 +96,10 @@ function coreFlow(site) {
         await page.getByText(new RegExp(escRe(product.title.slice(0, 25)), 'i')).filter({ visible: true }).first().waitFor({ timeout: 20000 });
       });
       await step('Checkout butonu', async () => {
-        const btn = page.locator('[name=checkout], button:has-text("Checkout"), a:has-text("Checkout")').filter({ visible: true }).first();
+        // Bazı mağazalarda checkout öncesi "Terms and Conditions" onay kutusu zorunlu
+        const box = page.locator('label:has-text("agree") input[type=checkbox], input[type=checkbox][id*=agree i], input[type=checkbox][name*=agree i], input[type=checkbox][id*=terms i], input[type=checkbox][name*=terms i], input[type=checkbox][class*=terms i], input[type=checkbox][class*=condition i], terms-conditions input[type=checkbox], [class*=term] input[type=checkbox]').filter({ visible: true }).first();
+        if (await box.count()) await box.check({ force: true }).catch(() => {});
+        const btn = page.locator('[name=checkout], button:has-text("Checkout"), a:has-text("Checkout"), button:has-text("Check out")').filter({ visible: true }).first();
         await Promise.all([page.waitForURL(/checkouts|authentication|account\./, { timeout: 45000 }), btn.click()]);
         result.checkout = page.url().includes('/checkouts/') ? 'Ödeme sayfası açıldı' : 'Müşteri giriş sayfası açıldı';
       });
@@ -103,7 +110,7 @@ function coreFlow(site) {
 async function runFlow(browser, site, flow, demoBreak) {
   const { ctx, page, jsErrors } = await newPage(browser);
   const file = nextFixture(flow.fixture);
-  const result = { id: flow.id, title: flow.title, url: flow.url, ok: true, steps: [], notes: [] };
+  const result = { id: flow.id, title: flow.title, app: flow.appName, url: flow.url, ok: true, steps: [], notes: [] };
   const t0 = Date.now();
   const step = async (name, fn) => {
     const s = Date.now();
@@ -181,9 +188,13 @@ async function linkCheck(browser, site) {
   try {
     await gotoOk(page, site.base + '/');
     const links = await withTimeout(page.evaluate(async () => {
-      const links = [...new Set([...document.querySelectorAll('a[href]')].map(a => a.href.split('#')[0])
-        .filter(h => h.startsWith(location.origin) && !/\/account|customer_authentication|\/cart|\/checkout/.test(h)))];
-      const broken = [];
+      const texts = new Map();
+      for (const a of document.querySelectorAll('a[href]')) {
+        const h = a.href.split('#')[0], t = (a.innerText || a.getAttribute('aria-label') || a.title || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+        if (!texts.get(h) && t) texts.set(h, t); else if (!texts.has(h)) texts.set(h, '');
+      }
+      const links = [...texts.keys()].filter(h => h.startsWith(location.origin) && !/\/account|customer_authentication|\/cart|\/checkout/.test(h));
+      const broken = [], all = [];
       for (const l of links) {
         // 5xx/429 geçici olabilir: bekleyip bir kez daha dene
         let status;
@@ -192,10 +203,11 @@ async function linkCheck(browser, site) {
           if (status !== 'hata' && status < 429) break;
           await new Promise(r => setTimeout(r, 3000));
         }
+        all.push({ url: l, text: texts.get(l), status });
         if (status === 'hata' || (status >= 400 && status !== 429)) broken.push({ url: l, status });
         await new Promise(r => setTimeout(r, 300));
       }
-      return { total: links.length, broken };
+      return { total: links.length, broken, all };
     }), 600000, 'Link kontrolü');
     return { ...links, ok: links.broken.length === 0 };
   } catch (e) {
@@ -207,7 +219,7 @@ async function linkCheck(browser, site) {
 
 async function testSite(browser, site, isFirstSite) {
   const flows = [];
-  const all = [coreFlow(site), ...site.flows].filter(f => !ONLY || f.id === ONLY);
+  const all = [coreFlow(site), ...site.flows].filter(f => !ONLY || ONLY.split(',').includes(f.id));
   for (const flow of all) {
     const demoBreak = FAIL_DEMO && isFirstSite && flow === all.find(f => f.id !== 'core');
     let r = await runFlow(browser, site, flow, demoBreak);
@@ -268,6 +280,16 @@ async function testSite(browser, site, isFirstSite) {
   const report = require('./report').build(run);
   fs.writeFileSync(file.replace(/\.json$/, '.html'), report.html);
   console.log(`Sonuç: ${run.ok ? 'SORUN YOK' : 'SORUN VAR'} · mail: ${report.sendEmail ? report.subject : 'gönderilmeyecek'} → ${file}`);
+
+  // Genel testte ayrıntılı Excel raporu (Özet + her site ayrı sayfa) maile eklenir
+  if (MODE === 'full') {
+    const xlsx = await require('./excel').build(run).catch(e => { console.log('Excel oluşturulamadı: ' + e.message); return null; });
+    if (xlsx) {
+      report.excelName = `site-test-raporu-${startedAt.slice(0, 10)}.xlsx`;
+      report.excel = xlsx.toString('base64');
+      fs.writeFileSync(path.join(OUT, report.excelName), xlsx);
+    }
+  }
 
   if (process.env.WEBHOOK_URL) {
     const payload = { ...report, mode: MODE, ok: run.ok, critical: run.critical, startedAt, alert: run.alert };
