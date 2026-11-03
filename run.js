@@ -92,7 +92,10 @@ function coreFlow(site) {
         await page.getByText(new RegExp(escRe(product.title.slice(0, 25)), 'i')).filter({ visible: true }).first().waitFor({ timeout: 20000 });
       });
       await step('Checkout butonu', async () => {
-        const btn = page.locator('[name=checkout], button:has-text("Checkout"), a:has-text("Checkout")').filter({ visible: true }).first();
+        // Bazı mağazalarda checkout öncesi "Terms and Conditions" onay kutusu zorunlu
+        const box = page.locator('label:has-text("agree") input[type=checkbox], input[type=checkbox][id*=agree i], input[type=checkbox][name*=agree i], input[type=checkbox][id*=terms i], input[type=checkbox][name*=terms i], input[type=checkbox][class*=terms i]').filter({ visible: true }).first();
+        if (await box.count()) await box.check({ force: true }).catch(() => {});
+        const btn = page.locator('[name=checkout], button:has-text("Checkout"), a:has-text("Checkout"), button:has-text("Check out")').filter({ visible: true }).first();
         await Promise.all([page.waitForURL(/checkouts|authentication|account\./, { timeout: 45000 }), btn.click()]);
         result.checkout = page.url().includes('/checkouts/') ? 'Ödeme sayfası açıldı' : 'Müşteri giriş sayfası açıldı';
       });
