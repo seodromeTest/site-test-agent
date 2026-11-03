@@ -81,7 +81,8 @@ const gsUploader = () => ({
 
 // GS Studio (By Size): her görsel ayrı transfer, fiyat seçilen ölçüye göre.
 // Basic ürünlerde aynı arayüz bir pencerede açılıyor ve kendi dosya alanını kullanıyor (input seçicisi).
-const gsStudio = ({ input = 'input[type=file]' } = {}) => ({
+// Yeni GS Studio sürümünde (i2s) dosya alanı input.i2s-hidden, uygulamanın kendi butonu button.i2s-add
+const gsStudio = ({ input = 'input.i2s-hidden, #gs-i2s-file-input, input[type=file]' } = {}) => ({
   appName: 'GS Studio',
   fixture: 'genel',
   fileProp: '_Print Ready',
@@ -121,7 +122,10 @@ const gsStudio = ({ input = 'input[type=file]' } = {}) => ({
     });
     await hooks.afterUpload?.();
     await step('Sepete ekle', async () => {
-      await page.getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first().click();
+      // Önce uygulamanın kendi butonu; yoksa (eski sürüm) görünen ilk Add to cart
+      const own = page.locator('button.i2s-add').filter({ visible: true }).first();
+      const btn = (await own.count()) ? own : page.getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first();
+      await btn.click();
       // GS Studio sepeti doğrulayamazsa "Shopify did not return a cart that GS-STUDIO could verify" diyor
       const cartErr = page.getByText(/did not return a cart|Nothing new was added/i).filter({ visible: true }).first();
       await page.waitForURL(/\/cart/, { timeout: 15000 }).catch(() => {});

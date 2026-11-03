@@ -1,4 +1,5 @@
 // Test sonucundan mail konusu ve HTML gövdesi üretir (Make bu metni olduğu gibi gönderir).
+const { siteRows } = require('./detay');
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const sec = ms => `${(ms / 1000).toFixed(1)} sn`;
 const fmtDate = iso => new Date(iso).toLocaleString('tr-TR', { timeZone: 'Europe/Berlin', dateStyle: 'short', timeStyle: 'short' });
@@ -40,15 +41,37 @@ function siteSummaryRow(s) {
   </tr>`;
 }
 
+// Site site, yapılan her kontrol alt alta (mail iletildiğinde de okunabilsin diye sade, satır içi stil)
+const ICON = { ok: '✓', hata: '✗', bilgi: 'ℹ', yapilmadi: '–' };
+const COLOR = { ok: C.ok, hata: C.bad, bilgi: C.warn, yapilmadi: C.muted };
 function siteDetail(s) {
-  const links = s.links;
-  return `<h3 style="margin:24px 0 6px">${s.ok ? '✅' : '⚠️'} ${esc(s.name)} <span style="font-weight:400;color:${C.muted};font-size:14px">– ${esc(s.domain)}</span></h3>
-  <table style="border-collapse:collapse;width:100%;font-size:14px">
-    <tr style="background:${C.soft};text-align:left"><th style="padding:8px 10px">Test / adımlar</th><th style="padding:8px 10px">Durum</th><th style="padding:8px 10px">Sepette</th><th style="padding:8px 10px">Süre</th></tr>
-    ${s.flows.map(flowRow).join('')}
-  </table>
-  ${links ? `<div style="font-size:13px;margin-top:8px"><b>Site içi linkler:</b> ${links.total} link kontrol edildi, ${links.broken.length ? `<span style="color:${C.bad}">${links.broken.length} kırık</span>` : `<span style="color:${C.ok}">kırık link yok</span>`}${links.error ? ` (${esc(links.error)})` : ''}
-    ${links.broken.length ? `<ul style="margin:4px 0 0 18px;padding:0">${links.broken.map(b => `<li><span style="color:${C.bad}">${esc(b.status)}</span> – ${esc(b.url)}</li>`).join('')}</ul>` : ''}</div>` : ''}`;
+  const all = siteRows(s);
+  const linkRowsAll = all.filter(r => r.bolum === 'Ana sayfadaki linkler');
+  const rows = all.filter(r => r.bolum !== 'Ana sayfadaki linkler');
+  const bad = all.filter(r => r.durum === 'hata').length;
+  const checks = all.filter(r => r.durum === 'ok' || r.durum === 'hata').length;
+  let last = null, n = 0;
+  const body = rows.map(r => {
+    let head = '';
+    if (r.bolum !== last) {
+      last = r.bolum;
+      const flow = s.flows.find(f => f.title === r.bolum);
+      head = `<tr bgcolor="#f6f8fa"><td colspan="3"><b>${esc(r.bolum)}</b>${flow && flow.id !== 'core' ? ` <a href="${esc(flow.url)}">${esc(flow.url.replace(/^https:\/\/(www\.)?/, ''))}</a>` : ''}</td></tr>`;
+    }
+    const num = r.durum === 'ok' || r.durum === 'hata' ? ++n : '';
+    return `${head}<tr><td>${num}</td><td>${esc(r.kontrol)}</td><td><font color="${COLOR[r.durum]}">${ICON[r.durum]} ${esc(r.sonuc)}</font></td></tr>`;
+  }).join('');
+  // Linkler: her biri ayrı satır yerine tek hücrede alt alta (mail boyutu küçük kalsın)
+  const linkBad = linkRowsAll.filter(r => r.durum === 'hata');
+  const linkCell = linkRowsAll.length ? `<tr bgcolor="#f6f8fa"><td colspan="3"><b>Ana sayfadaki linkler</b> – ${linkRowsAll.length} link tek tek açıldı, ${linkBad.length ? `<font color="${C.bad}"><b>${linkBad.length} sorunlu</b></font>` : `<font color="${C.ok}">hepsi açılıyor</font>`}</td></tr>
+    ${linkBad.map(r => `<tr><td>${++n}</td><td>${esc(r.kontrol)}<br><small>${esc(r.adres)}</small></td><td><font color="${C.bad}">✗ ${esc(r.sonuc)}</font></td></tr>`).join('')}
+    <tr><td></td><td colspan="2"><small>${linkRowsAll.filter(r => r.durum !== 'hata').map(r => `<font color="${C.ok}">✓</font> ${esc(r.kontrol)} <font color="${C.muted}">${esc(r.adres.replace(/^https:\/\/[^/]+/, ''))}</font>`).join('<br>')}</small></td></tr>` : '';
+  return `<h3 style="margin:28px 0 4px">${s.ok ? '✅' : '⚠️'} ${esc(s.name)} <font color="${C.muted}" style="font-weight:400;font-size:14px">– ${esc(s.domain)}</font></h3>
+  <div style="font-size:13px;margin-bottom:6px">${checks} kontrol yapıldı · ${bad ? `<font color="${C.bad}"><b>${bad} sorun</b></font>` : `<font color="${C.ok}"><b>sorun yok</b></font>`}</div>
+  <table border="1" cellpadding="5" cellspacing="0" width="100%" style="border-collapse:collapse;border-color:#d0d7de;font-size:13px">
+    <tr align="left"><th width="28">#</th><th>Kontrol edilen</th><th>Sonuç</th></tr>
+    ${body}${linkCell}
+  </table>`;
 }
 
 function build(run) {
@@ -61,7 +84,7 @@ function build(run) {
   };
 
   let subject;
-  if (newFailures.length) subject = `🚨 ACİL: ${byFlow(newFailures)} çalışmıyor`;
+  if (newFailures.length && !isFull) subject = `🚨 ACİL: ${byFlow(newFailures)} çalışmıyor`;
   else if (isFull) subject = badSites.length
     ? `⚠️ Genel site testi – ${run.sites.length} siteden ${badSites.length}'${badSites.length === 1 ? 'inde' : 'sinde'} sorun var`
     : `✅ Genel site testi – ${run.sites.length} sitede sorun yok`;
