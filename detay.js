@@ -26,7 +26,9 @@ function coreText(f, s) {
 function uploadText(f, s) {
   switch (s.name) {
     case 'Sayfa açılıyor': return ['Ürün sayfası açılıyor mu', s.ok ? `Açıldı (${sn(s.ms)})` : null];
-    case 'Upload': return [`Test dosyası yükleniyor (${f.file || 'görsel'})`, s.ok ? 'Dosya yüklendi, ölçü ve fiyat hesaplandı' : null];
+    case 'Upload': return [`Test dosyası yükleniyor (${f.file || 'görsel'})`, s.ok ? (f.app === 'Everyday upload aracı' ? 'Görsel baskı alanına yüklendi, önizlemesi göründü' : 'Dosya yüklendi, ölçü ve fiyat hesaplandı') : null];
+    case 'Adet seçimi': return ['Beden/adet tablosundan adet seçiliyor (en az adet şartı varsa kontrol ediliyor)', s.ok ? 'Adet girildi, toplam fiyat hesaplandı' : null];
+    case 'Tüm ürünlerin upload düzeni': return ['Sitedeki tüm ürünlerde upload aracı var mı, baskı alanı düzeni testtekilerle aynı mı', s.ok ? 'Tüm ürünlerde upload aracı var, yeni düzen yok' : null];
     case 'Onay kutusu': return ['Çözünürlük onay kutusu işaretleniyor', s.ok ? 'İşaretlendi' : null];
     case 'Builder açılıyor': return ['Gang sheet builder açılıyor mu', s.ok ? 'Açıldı' : null];
     case "Görseli sheet'e yerleştir": return ['Görsel sheet üzerine yerleştiriliyor', s.ok ? 'Yerleştirildi' : null];
