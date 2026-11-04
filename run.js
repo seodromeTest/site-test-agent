@@ -225,10 +225,17 @@ async function linkCheck(browser, site) {
   }
 }
 
+// Genel testte bot korumasına takılmamak için yavaş git: sepete ekleyen akışlar arasında 20–30 sn,
+// siteler arasında 60 sn bekle (müşteri gibi). Hızlı deneme için NO_PACE=1.
+const PACE = MODE === 'full' && !process.env.NO_PACE;
+const rest = (min, max) => PACE ? new Promise(r => setTimeout(r, min * 1000 + Math.random() * (max - min) * 1000)) : Promise.resolve();
+const retryWait = r => PACE ? (r.botBlock ? 120 : 45) : (r.botBlock ? 60 : 0);
+
 async function testSite(browser, site, isFirstSite) {
   const flows = [];
   const all = [coreFlow(site), ...site.flows].filter(f => !ONLY || ONLY.split(',').includes(f.id));
-  for (const flow of all) {
+  for (const [k, flow] of all.entries()) {
+    if (k > 0) await (flow.noCart ? rest(3, 6) : rest(20, 30));
     const demoBreak = FAIL_DEMO && isFirstSite && flow === all.find(f => f.id !== 'core');
     let r = await runFlow(browser, site, flow, demoBreak);
     // Geçici bir aksaklığı hata saymamak için başarısız akışı bir kez tekrar dene
@@ -238,7 +245,7 @@ async function testSite(browser, site, isFirstSite) {
       if (r.screenshot) fs.writeFileSync(path.join(OUT, `ilk-deneme-${site.domain}-${flow.id}-${Date.now()}.jpg`), Buffer.from(r.screenshot, 'base64'));
       console.log(`  ↻ ${site.domain}/${flow.id} ilk denemede takıldı (${first?.name}: ${first?.error}), tekrar deneniyor`);
       // Bot korumasına takıldıysa biraz bekle (koruma kısa süreli)
-      if (r.botBlock) await new Promise(res => setTimeout(res, 60000));
+      await new Promise(res => setTimeout(res, retryWait(r) * 1000));
       const retry = await runFlow(browser, site, flow, false);
       retry.retried = true;
       retry.firstAttempt = { step: first?.name, error: first?.error, botBlock: r.botBlock };
@@ -267,13 +274,17 @@ async function testSite(browser, site, isFirstSite) {
   const t0 = Date.now();
   const browser = await chromium.launch();
   const sites = [];
-  for (const [i, name] of SITES.entries()) sites.push(await testSite(browser, require(`./sites/${name}`), i === 0));
+  for (const [i, name] of SITES.entries()) {
+    if (i > 0) await rest(60, 60);
+    sites.push(await testSite(browser, require(`./sites/${name}`), i === 0));
+  }
   await browser.close();
 
   // Tarayıcı uyumluluğu (genel test): Firefox ve Safari motoru (WebKit) – her sitede ana akış + bir upload ürünü.
   // Edge ve Opera Chrome motoruyla (Chromium) çalışır; Chrome sonuçları onlar için de geçerli.
   if (MODE === 'full' && (!ONLY || ONLY.split(',').includes('tarayici'))) {
-    await Promise.all([[firefox, 'Firefox'], [webkit, 'Safari (WebKit)']].map(async ([type, label]) => {
+    // Firefox ve Safari sırayla (aynı anda değil) ve yavaş: bot korumasına takılmamak için
+    for (const [type, label] of [[firefox, 'Firefox'], [webkit, 'Safari (WebKit)']]) await (async () => {
       let b;
       try { b = await type.launch(); } catch (e) {
         for (const s of sites) (s.tarayicilar ||= []).push({ browser: label, error: 'Tarayıcı başlatılamadı: ' + e.message.split('\n')[0].slice(0, 150) });
@@ -283,11 +294,13 @@ async function testSite(browser, site, isFirstSite) {
         const site = require(`./sites/${name}`);
         const out = [];
         for (const flow of [coreFlow(site), site.flows.find(f => !f.noCart)].filter(Boolean)) {
+          await rest(20, 30);
           let r = await runFlow(b, site, flow, false).catch(e => ({ id: flow.id, title: flow.title, url: flow.url, ok: false, steps: [{ name: 'Başlatma', ok: false, error: e.message.split('\n')[0] }], notes: [] }));
           if (!r.ok) {
             const first = r.steps.find(s => !s.ok);
+            await new Promise(res => setTimeout(res, retryWait(r) * 1000));
             const retry = await runFlow(b, site, flow, false).catch(() => null);
-            if (retry) { retry.retried = true; retry.firstAttempt = { step: first?.name, error: first?.error }; r = retry; }
+            if (retry) { retry.retried = true; retry.firstAttempt = { step: first?.name, error: first?.error, botBlock: r.botBlock }; r = retry; }
           }
           delete r.screenshot; // rapor küçük kalsın
           out.push(r);
@@ -295,10 +308,10 @@ async function testSite(browser, site, isFirstSite) {
           console.log(`${r.ok ? '✅' : '❌'} [${label}] ${site.domain} – ${r.title}` + (bad ? ` → ${bad.name}: ${bad.error}` : ''));
         }
         (sites[i].tarayicilar ||= []).push({ browser: label, flows: out });
-        if (out.some(f => !f.ok)) sites[i].ok = false;
+        if (out.some(f => !f.ok && !f.botBlock)) sites[i].ok = false;
       }
       await withTimeout(b.close(), 30000, 'close').catch(() => {});
-    }));
+    })();
   }
 
   // Önceki duruma göre yeni sorunlar ve düzelenler
