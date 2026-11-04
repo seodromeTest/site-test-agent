@@ -31,7 +31,7 @@ function flowRow(f) {
 function siteSummaryRow(s) {
   const core = s.flows.find(f => f.id === 'core');
   const uploads = s.flows.filter(f => f.id !== 'core');
-  const upOk = uploads.filter(f => f.ok).length;
+  const upOk = uploads.filter(f => f.ok || f.botBlock).length;
   return `<tr>
     ${td(`<b>${esc(s.domain)}</b>`)}
     ${td(core ? (core.ok ? `<span style="color:${C.ok}">✅</span>` : `<span style="color:${C.bad}">❌ ${esc(core.steps.find(x => !x.ok)?.name)}</span>`) : '—')}

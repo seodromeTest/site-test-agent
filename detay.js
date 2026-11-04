@@ -43,16 +43,18 @@ function uploadText(f, s) {
 function flowRows(f) {
   const isCore = f.id === 'core';
   const bolum = isCore ? 'Ana fonksiyonlar' : f.title;
+  // Test sunucusu bot korumasına takıldıysa: site hatası sayma, "test edilemedi" olarak göster
+  const BOT = 'Test edilemedi: test sunucusu (GitHub) Shopify/Cloudflare bot korumasına ("Verify you are human") takıldı – site hatası değil, elle kontrol önerilir';
   const rows = f.steps.map(s => {
     const [kontrol, okText] = (isCore ? coreText : uploadText)(f, s);
     return { bolum, kontrol, adres: isCore && s.name === 'Ana sayfa' ? f.url && new URL(f.url).origin + '/' : f.url,
-      sonuc: s.ok ? okText || 'Başarılı' : `Sorun: ${human(s.error)}`, durum: s.ok ? 'ok' : 'hata' };
+      sonuc: s.ok ? okText || 'Başarılı' : f.botBlock ? BOT : `Sorun: ${human(s.error)}`, durum: s.ok ? 'ok' : f.botBlock ? 'yapilmadi' : 'hata' };
   });
   // Hata sonrası yapılamayan adımlar da görünsün
   if (isCore && !f.ok) for (const name of CORE_STEPS.slice(CORE_STEPS.indexOf(f.steps[f.steps.length - 1]?.name) + 1))
     rows.push({ bolum, kontrol: coreText(f, { name })[0], adres: '', sonuc: 'Yapılamadı (önceki adımda sorun var)', durum: 'yapilmadi' });
   if (!f.ok && !isCore) rows.push({ bolum, kontrol: 'Sonraki adımlar', adres: '', sonuc: 'Yapılamadı (önceki adımda sorun var)', durum: 'yapilmadi' });
-  if (f.retried && f.ok) rows.push({ bolum, kontrol: 'Not', adres: '', sonuc: `İlk denemede takıldı (${f.firstAttempt?.step || ''}), ikinci denemede geçti`, durum: 'bilgi' });
+  if (f.retried && f.ok) rows.push({ bolum, kontrol: 'Not', adres: '', sonuc: `İlk denemede takıldı (${f.firstAttempt?.step || ''}${f.firstAttempt?.botBlock ? ', bot koruması' : ''}), ikinci denemede geçti`, durum: 'bilgi' });
   for (const n of f.notes || []) rows.push({ bolum, kontrol: 'Not', adres: '', sonuc: n, durum: 'bilgi' });
   return rows;
 }
