@@ -214,6 +214,118 @@ const builder = () => ({
   },
 });
 
+// Everyday Custom Print: mağaza genelinde tek upload aracı (beden/adet tablosu + baskı alanları).
+// Ürünler arasındaki fark sadece sunulan baskı alanları (ön, arka, göğüs, kol). Sepette her alan "<Alan> Design" özelliği.
+const SS_WIDGET = '[id*=ssactivewear_sync_matrix]';
+const areaName = a => a.split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+const AREA_TR = { full_front: 'Ön', full_back: 'Arka', left_chest: 'Sol göğüs', right_chest: 'Sağ göğüs', left_sleeve: 'Sol kol', right_sleeve: 'Sağ kol' };
+const areaTr = a => AREA_TR[a] || areaName(a);
+
+// Beden/adet tablosunda ilk bedene 1 adet gir; ürünün en az adet şartı varsa (Avada) uyarıyı kontrol edip o adede çıkar
+async function ssQuantity(page, notes) {
+  const w = page.locator(SS_WIDGET).first();
+  await w.waitFor({ timeout: 45000 });
+  const q = w.locator('input.ss-input-field').filter({ visible: true }).first();
+  await q.waitFor({ timeout: 30000 });
+  await q.fill('1'); await q.press('Tab');
+  // En az adet uyarısı (Avada) gecikmeli çıkabiliyor: 5 sn'ye kadar bekle
+  const min = page.getByText(/must select at least \d+/i).filter({ visible: true }).first();
+  await min.waitFor({ timeout: 5000 }).catch(() => {});
+  if (await min.isVisible().catch(() => false)) {
+    const n = +(await min.innerText()).match(/at least (\d+)/i)[1];
+    notes.push(`Bu üründe en az ${n} adet şartı var: 1 adette uyarı doğru gösterildi, test ${n} adetle yapıldı`);
+    await q.fill(String(n)); await q.press('Tab');
+    await page.waitForTimeout(1500);
+    if (await min.isVisible().catch(() => false)) throw new Error(`${n} adet girildiği halde "en az ${n} adet" uyarısı kalkmadı`);
+  } else if (await q.inputValue().catch(() => '1') !== '1') {
+    notes.push(`Adet alanı 1 yerine ${await q.inputValue()} oldu (ürünün en az adet ayarı)`);
+  }
+  return w;
+}
+
+const ssMatrix = ({ areas = ['full_front'] } = {}) => ({
+  appName: 'Everyday upload aracı',
+  fixture: 'genel',
+  fileProp: `${areaName(areas[0])} Design`,
+  extraProps: areas.slice(1).map(a => `${areaName(a)} Design`),
+  accepts: /\.(png|jpe?g|webp|svg)$/i,
+  matrixFiles: /^(tasarim|builder)_/,
+  async read() { return {}; },
+  async run(page, step, file, notes) {
+    let w;
+    await step('Adet seçimi', async () => { w = await ssQuantity(page, notes); });
+    await step('Upload', async () => {
+      for (const a of areas) {
+        const input = w.locator(`input[type=file][id^="file-input-${a}-"]`);
+        if (!(await input.count())) throw new Error(`"${areaTr(a)}" baskı alanı sayfada yok`);
+        // Önizleme hemen çıkıyor ama dosya sunucuya ayrıca yükleniyor: o isteğin başarıyla bitmesini bekle
+        const up = page.waitForResponse(r => /\/apps\/ssactiveorder\/api\/upload/.test(r.url()) && r.request().method() === 'POST', { timeout: 90000 });
+        await input.setInputFiles(file);
+        const res = await up.catch(() => null);
+        if (!res) throw new Error(`"${areaTr(a)}" alanı: dosya 90 sn içinde sunucuya yüklenmedi`);
+        if (!res.ok()) throw new Error(`"${areaTr(a)}" alanı: yükleme sunucusu hata verdi (HTTP ${res.status()})`);
+        // Yüklenince alanın adı yerine görsel ve × (kaldır) çıkıyor
+        const label = areaName(a).toUpperCase();
+        const deadline = Date.now() + 60000;
+        for (;;) {
+          const t = ((await w.innerText()).split(/UPLOAD ARTWORK/i)[1] || '').split(/Order Summary|TOTAL/i)[0];
+          if (!t.toUpperCase().split('\n').map(x => x.trim()).includes(label)) break;
+          if (/fail|error/i.test(t)) throw new Error(`"${areaTr(a)}" alanına yükleme başarısız: ${t.match(/.*(fail|error).*/i)[0].slice(0, 100)}`);
+          if (Date.now() > deadline) throw new Error(`"${areaTr(a)}" alanına yüklenen görsel 60 sn içinde görünmedi`);
+          await page.waitForTimeout(1000);
+        }
+      }
+      if (areas.length > 1) notes.push(`${areas.length} baskı alanının hepsine görsel yüklendi: ${areas.map(areaTr).join(', ')}`);
+    });
+    await step('Sepete ekle', async () => {
+      await page.waitForTimeout(1500);
+      await w.locator('button.ss-action-btn').filter({ visible: true }).first().click();
+    });
+  },
+});
+
+// Everyday: tüm ürünleri tara, her ürünün baskı alanı düzenini bilinen düzenlerle karşılaştır.
+// Bilinmeyen yeni bir düzen ya da upload aracı olmayan ürün çıkarsa raporda görünsün.
+const ssLayoutScan = known => ({
+  appName: 'Upload düzeni taraması',
+  noCart: true,
+  accepts: /$^/,
+  matrixFiles: /$^/,
+  async run(page, step, file, notes) {
+    await step('Tüm ürünlerin upload düzeni', async () => {
+      const list = [];
+      for (let n = 1; n < 10; n++) {
+        const j = await page.evaluate(n => fetch(`/products.json?limit=250&page=${n}`).then(r => r.json()), n);
+        if (!j.products?.length) break;
+        list.push(...j.products.map(p => ({ handle: p.handle, title: p.title })));
+      }
+      const pages = await Promise.all([0, 1, 2].map(() => page.context().newPage()));
+      const queue = [...list], found = [];
+      await Promise.all(pages.map(async pg => {
+        while (queue.length) {
+          const p = queue.shift();
+          try {
+            await pg.goto(`${new URL(page.url()).origin}/products/${p.handle}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+            await pg.locator(SS_WIDGET).first().waitFor({ state: 'attached', timeout: 20000 }).catch(() => {});
+            const areas = await pg.evaluate(() => [...document.querySelectorAll('input[type=file][id^="file-input-"]')].map(f => f.id.replace(/^file-input-/, '').split('-')[0]));
+            found.push({ ...p, layout: areas.join(',') });
+          } catch (e) { found.push({ ...p, error: e.message.split('\n')[0].slice(0, 80) }); }
+        }
+        await pg.close().catch(() => {});
+      }));
+      const none = found.filter(f => !f.error && !f.layout), errs = found.filter(f => f.error);
+      const unknown = found.filter(f => f.layout && !known.includes(f.layout));
+      const groups = new Set(found.filter(f => f.layout).map(f => f.layout));
+      notes.push(`${found.length} ürün tarandı: ${found.length - none.length - errs.length} üründe upload aracı var, ${groups.size} farklı baskı alanı düzeni`);
+      const problems = [];
+      if (unknown.length) problems.push(`yeni baskı alanı düzeni (testte yok): ${unknown.slice(0, 5).map(u => `${u.title} [${u.layout.split(',').map(areaTr).join(', ')}]`).join('; ')}`);
+      if (none.length) problems.push(`upload aracı görünmeyen ürün: ${none.slice(0, 5).map(u => u.title).join('; ')}`);
+      if (errs.length) problems.push(`açılamayan ürün sayfası: ${errs.slice(0, 5).map(u => u.title).join('; ')}`);
+      if (problems.length) throw new Error(problems.join(' · '));
+    });
+  },
+});
+
 // Upload uygulaması henüz test edilmeyen ürünler: sadece sayfanın açıldığı ve doğru ürünün göründüğü kontrol edilir
 const pageCheck = () => ({
   appName: 'sayfa kontrolü – uygulama henüz testte değil',
@@ -238,4 +350,4 @@ const product = (base, handle, title, app) => ({
   ...app,
 });
 
-module.exports = { uploadStudio, gsUploader, gsStudio, builder, pageCheck, product };
+module.exports = { uploadStudio, gsUploader, gsStudio, builder, pageCheck, product, ssMatrix, ssLayoutScan, ssQuantity, SS_WIDGET };

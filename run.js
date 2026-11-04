@@ -73,6 +73,18 @@ function coreFlow(site) {
       if (result.skipCart) return;
       await step('Add to cart butonu', async () => {
         // Sayfada önerilen ürünlerin de butonu olabilir: önce ana ürünün formundaki butonu kullan
+        // Bazı mağazalarda ürün kendi aracıyla sepete ekleniyor (ör. Everyday: beden/adet tablosu)
+        if (site.core.addToCart) {
+          await site.core.addToCart(page, notes);
+          let item;
+          for (const end = Date.now() + 20000; !item && Date.now() < end;) {
+            await page.waitForTimeout(1500);
+            item = (await getCart(page).catch(() => null))?.items?.find(i => i.product_id === product.id);
+          }
+          if (!item) throw new Error('Ürün sepete eklenmedi');
+          result.cart = { variant: product.title.slice(0, 40), price: (item.final_line_price / 100).toFixed(2) };
+          return;
+        }
         const ids = product.variants.map(v => `input[name="id"][value="${v.id}"]`).join(',');
         const main = page.locator('form[action*="/cart/add"]').filter({ has: page.locator(ids) })
           .getByRole('button', { name: /add to cart/i }).filter({ visible: true });
@@ -144,6 +156,9 @@ async function runFlow(browser, site, flow, demoBreak) {
       }
       if (!item) throw new Error(`Ürün sepete düşmedi (${flow.expectProduct})`);
       if (!item.properties?.[flow.fileProp]) throw new Error(`Sepette yüklenen dosya bilgisi yok (${flow.fileProp})`);
+      // Birden fazla baskı alanına yüklendiyse hepsi sepette olmalı
+      const missing = (flow.extraProps || []).filter(k => !item.properties?.[k]);
+      if (missing.length) throw new Error(`Sepette bazı baskı alanlarının dosyası yok: ${missing.join(', ')}`);
       result.cart = { variant: item.variant_title, price: (item.final_line_price / 100).toFixed(2) };
     });
     await step('Baskı dosyası erişilebilir', async () => {
@@ -178,10 +193,15 @@ async function runFlow(browser, site, flow, demoBreak) {
     // Test sunucusu (GitHub, veri merkezi IP'si) Shopify/Cloudflare bot korumasına takılmış olabilir:
     // sayfada "Verify you are human" ya da sepet isteği challenge dönüyorsa bu site hatası değildir
     result.botBlock = await withTimeout(page.evaluate(async () => {
-      const re = /verify you are human|needs to be verified|cf-chl|challenge-platform|captcha/i;
-      if (re.test(document.documentElement.innerHTML.slice(0, 200000))) return true;
-      try { const r = await fetch('/cart.js', { cache: 'no-store' }); const t = await r.text(); return r.status === 403 || r.status === 429 || re.test(t); }
-      catch (e) { return false; }
+      // Sadece görünen doğrulama sayfası sayılır (Shopify sayfalarında challenge-platform scripti her zaman var, ölçüt olamaz)
+      const re = /verify you are human|needs to be verified|checking your browser|just a moment/i;
+      if (re.test(document.title) || re.test((document.body?.innerText || '').slice(0, 3000))) return true;
+      try {
+        const r = await fetch('/cart.js', { cache: 'no-store' });
+        if (r.status === 403 || r.status === 429) return true;
+        const t = await r.text();
+        try { JSON.parse(t); return false; } catch (e) { return re.test(t); }
+      } catch (e) { return false; }
     }), 15000, 'botcheck').catch(() => false);
   }
   result.ms = Date.now() - t0;
