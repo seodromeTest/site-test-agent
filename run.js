@@ -175,6 +175,14 @@ async function runFlow(browser, site, flow, demoBreak) {
       result.steps.push({ name: `Zaman aşımı (son başarılı adım: ${last})`, ok: false, error: e.message.split('\n')[0] });
     }
     result.screenshot = await withTimeout(shot(page), 15000, 'shot').catch(() => null);
+    // Test sunucusu (GitHub, veri merkezi IP'si) Shopify/Cloudflare bot korumasına takılmış olabilir:
+    // sayfada "Verify you are human" ya da sepet isteği challenge dönüyorsa bu site hatası değildir
+    result.botBlock = await withTimeout(page.evaluate(async () => {
+      const re = /verify you are human|needs to be verified|cf-chl|challenge-platform|captcha/i;
+      if (re.test(document.documentElement.innerHTML.slice(0, 200000))) return true;
+      try { const r = await fetch('/cart.js', { cache: 'no-store' }); const t = await r.text(); return r.status === 403 || r.status === 429 || re.test(t); }
+      catch (e) { return false; }
+    }), 15000, 'botcheck').catch(() => false);
   }
   result.ms = Date.now() - t0;
   if (jsErrors.length) result.jsErrors = [...new Set(jsErrors)].slice(0, 5);
@@ -229,9 +237,11 @@ async function testSite(browser, site, isFirstSite) {
       // İlk denemedeki takılmanın ekran görüntüsünü sakla (geçici aksaklık mı, gerçek sorun mu incelemek için)
       if (r.screenshot) fs.writeFileSync(path.join(OUT, `ilk-deneme-${site.domain}-${flow.id}-${Date.now()}.jpg`), Buffer.from(r.screenshot, 'base64'));
       console.log(`  ↻ ${site.domain}/${flow.id} ilk denemede takıldı (${first?.name}: ${first?.error}), tekrar deneniyor`);
+      // Bot korumasına takıldıysa biraz bekle (koruma kısa süreli)
+      if (r.botBlock) await new Promise(res => setTimeout(res, 60000));
       const retry = await runFlow(browser, site, flow, false);
       retry.retried = true;
-      retry.firstAttempt = { step: first?.name, error: first?.error };
+      retry.firstAttempt = { step: first?.name, error: first?.error, botBlock: r.botBlock };
       r = retry;
     }
     flows.push(r);
@@ -249,7 +259,7 @@ async function testSite(browser, site, isFirstSite) {
     console.log(`${bad.length ? '⚠️' : '✅'} ${site.domain} – genel kontrol: ${genel.length} satır, ${bad.length} sorun`);
     for (const b of bad) console.log(`     ✗ ${b.bolum} | ${b.kontrol} | ${b.adres} | ${b.sonuc}`);
   }
-  return { name: site.name, domain: site.domain, base: site.base, flows, links, genel, ok: flows.every(f => f.ok) && (!links || links.ok) };
+  return { name: site.name, domain: site.domain, base: site.base, flows, links, genel, ok: flows.every(f => f.ok || f.botBlock) && (!links || links.ok) };
 }
 
 (async () => {

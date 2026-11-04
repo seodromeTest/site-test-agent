@@ -115,11 +115,24 @@ async function genelKontrol(browser, site) {
       if (!hasSub || !name) continue;
       dropdownTried++;
       await page.mouse.move(5, 600).catch(() => {});
-      await page.waitForTimeout(400);
+      // Önceki alt menünün kapanma animasyonu bitsin
+      await page.waitForTimeout(1200);
       const before = await onScreen(page);
-      await li.hover().catch(() => {});
-      await page.waitForTimeout(800);
-      let visibleSub = newOnes(before, await onScreen(page));
+      // li'nin ortası değil, menü başlığının kendisi (bazı temalarda li alt menüyle birlikte büyük bir kutu)
+      const head = li.locator('a, summary, button').filter({ visible: true }).first();
+      await ((await head.count()) ? head : li).hover().catch(() => {});
+      // Bazı temalarda alt menü gecikmeli/animasyonla açılıyor: 4 sn'ye kadar bekle
+      let visibleSub = 0;
+      for (const end = Date.now() + 4000; Date.now() < end && visibleSub < 2;) {
+        await page.waitForTimeout(400);
+        visibleSub = newOnes(before, await onScreen(page));
+      }
+      // Yedek kontrol: menü öğesinin kendi alt menüsündeki linkler ekranda görünür ve tıklanabilir mi
+      if (visibleSub < 2) visibleSub = Math.max(visibleSub, await li.evaluate(el => [...el.querySelectorAll('ul a, [class*=mega] a, [class*=dropdown] a, details a')].filter(a => {
+        const r = a.getBoundingClientRect(); if (r.width < 2 || r.height < 2 || r.top < 0 || r.bottom > innerHeight) return false;
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return hit && (a.contains(hit) || hit.contains(a));
+      }).length).catch(() => 0));
       // Üzerine gelince açılmıyorsa tıklayarak açılan menü olabilir
       const summary = li.locator('summary, button').first();
       let clicked = false;
@@ -171,7 +184,11 @@ async function genelKontrol(browser, site) {
   const collections = [...new Set(unique.filter(u => isInternal(u) && /\/collections\/[^/?]+\/?$/.test(new URL(u).pathname) && !/\/collections\/all\/?$/.test(new URL(u).pathname)))];
   const counts = new Map(await pool(collections, 4, async u => {
     try {
-      const j = await fetch(u.replace(/\/$/, '') + '/products.json?limit=1', { signal: AbortSignal.timeout(20000) }).then(r => r.json());
+      // Eski koleksiyon adresi yeni koleksiyona yönlendirilmiş olabilir: ürünleri yönlendirilen adresten say
+      const page = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(20000) });
+      page.body?.cancel().catch(() => {});
+      const final = new URL(page.url || u); final.search = ''; final.hash = '';
+      const j = await fetch(final.href.replace(/\/$/, '') + '/products.json?limit=1', { signal: AbortSignal.timeout(20000) }).then(r => r.json());
       let n = Array.isArray(j.products) ? j.products.length : null;
       // products.json bazı mağazalarda kapalı/filtreli: boş görünürse sayfanın kendisinde ürün linki var mı bak
       if (n === 0) {
