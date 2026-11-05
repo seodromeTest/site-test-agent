@@ -52,12 +52,19 @@ function flowRows(f) {
     return { bolum, kontrol, adres: isCore && s.name === 'Ana sayfa' ? f.url && new URL(f.url).origin + '/' : f.url,
       sonuc: s.ok ? okText || 'Başarılı' : f.botBlock ? BOT : `Sorun: ${human(s.error)}`, durum: s.ok ? 'ok' : f.botBlock ? 'yapilmadi' : 'hata' };
   });
+  // Hata anındaki konsol / ağ kaydı: sorunlu adımın hemen altında
+  const failed = f.steps.find(s => !s.ok);
+  if (failed?.tani?.length) {
+    const i = rows.findIndex(r => r.durum === 'hata' || r.durum === 'yapilmadi');
+    rows.splice(i + 1, 0, { bolum, kontrol: 'Hata anındaki konsol ve ağ kayıtları', adres: '', sonuc: failed.tani.join(' | '), durum: 'bilgi' });
+  }
   // Hata sonrası yapılamayan adımlar da görünsün
   if (isCore && !f.ok) for (const name of CORE_STEPS.slice(CORE_STEPS.indexOf(f.steps[f.steps.length - 1]?.name) + 1))
     rows.push({ bolum, kontrol: coreText(f, { name })[0], adres: '', sonuc: 'Yapılamadı (önceki adımda sorun var)', durum: 'yapilmadi' });
   if (!f.ok && !isCore) rows.push({ bolum, kontrol: 'Sonraki adımlar', adres: '', sonuc: 'Yapılamadı (önceki adımda sorun var)', durum: 'yapilmadi' });
   if (f.retried && f.ok) rows.push({ bolum, kontrol: 'Not', adres: '', sonuc: `İlk denemede takıldı (${f.firstAttempt?.step || ''}${f.firstAttempt?.botBlock ? ', bot koruması' : ''}), ikinci denemede geçti`, durum: 'bilgi' });
   for (const n of f.notes || []) rows.push({ bolum, kontrol: 'Not', adres: '', sonuc: n, durum: 'bilgi' });
+  if (f.konsol?.length) rows.push({ bolum, kontrol: 'Tarayıcı konsolundaki hatalar', adres: '', sonuc: f.konsol.join(' | '), durum: 'bilgi' });
   return rows;
 }
 
@@ -77,7 +84,7 @@ function browserRows(s) {
   if (!s.tarayicilar?.length) return [];
   const rows = [{ bolum: 'Tarayıcı uyumluluğu', kontrol: 'Chrome', adres: '', sonuc: 'Yukarıdaki tüm testler Chrome ile yapıldı. Edge ve Opera da Chrome motoruyla çalışır; bu sonuçlar onlar için de geçerli', durum: 'bilgi' }];
   for (const t of s.tarayicilar) {
-    if (t.error) { rows.push({ bolum: `${t.browser}`, kontrol: 'Tarayıcı', adres: '', sonuc: `Sorun: ${t.error}`, durum: 'hata' }); continue; }
+    if (t.error) { rows.push({ bolum: `${t.browser}`, kontrol: 'Tarayıcı', adres: '', sonuc: t.skipped ? t.error : `Sorun: ${t.error}`, durum: t.skipped ? 'yapilmadi' : 'hata' }); continue; }
     for (const f of t.flows) for (const r of flowRows(f)) rows.push({ ...r, bolum: `${t.browser} – ${r.bolum}` });
   }
   return rows;

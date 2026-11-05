@@ -27,7 +27,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 355
     steps:
       # Test dosyası kütüphanesi (fixtures/kutuphane, ~100 MB) her saat indirilmesin
       - uses: actions/checkout@v4

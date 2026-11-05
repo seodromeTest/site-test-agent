@@ -251,19 +251,23 @@ const ssMatrix = ({ areas = ['full_front'] } = {}) => ({
   accepts: /\.(png|jpe?g|webp|svg)$/i,
   matrixFiles: /^(tasarim|builder)_/,
   async read() { return {}; },
-  async run(page, step, file, notes) {
+  async run(page, step, file, notes, hooks = {}) {
     let w;
     await step('Adet seçimi', async () => { w = await ssQuantity(page, notes); });
     await step('Upload', async () => {
       for (const a of areas) {
         const input = w.locator(`input[type=file][id^="file-input-${a}-"]`);
         if (!(await input.count())) throw new Error(`"${areaTr(a)}" baskı alanı sayfada yok`);
-        // Önizleme hemen çıkıyor ama dosya sunucuya ayrıca yükleniyor: o isteğin başarıyla bitmesini bekle
-        const up = page.waitForResponse(r => /\/apps\/ssactiveorder\/api\/upload/.test(r.url()) && r.request().method() === 'POST', { timeout: 90000 });
+        // Önizleme hemen çıkıyor ama dosya sunucuya ayrıca yükleniyor. Sıralı: dosyayı seç, sonra sayfanın
+        // başlattığı yükleme isteği bitene kadar bekle, sonra oturum kaydında o istek hata vermiş mi bak.
+        const m = hooks.log?.mark();
         await input.setInputFiles(file);
-        const res = await up.catch(() => null);
-        if (!res) throw new Error(`"${areaTr(a)}" alanı: dosya 90 sn içinde sunucuya yüklenmedi`);
-        if (!res.ok()) throw new Error(`"${areaTr(a)}" alanı: yükleme sunucusu hata verdi (HTTP ${res.status()})`);
+        if (hooks.log) {
+          const pending = await hooks.log.settle(90000);
+          if (pending) throw new Error(`"${areaTr(a)}" alanı: dosya 90 sn içinde sunucuya yüklenmedi`);
+          const bad = hooks.log.since(m).find(e => e.kind === 'network' && /\/apps\/ssactiveorder\/api\/upload/.test(e.url));
+          if (bad) throw new Error(`"${areaTr(a)}" alanı: yükleme sunucusu hata verdi (${bad.status ? 'HTTP ' + bad.status : bad.text})`);
+        }
         // Yüklenince alanın adı yerine görsel ve × (kaldır) çıkıyor
         const label = areaName(a).toUpperCase();
         const deadline = Date.now() + 60000;
@@ -289,6 +293,7 @@ const ssMatrix = ({ areas = ['full_front'] } = {}) => ({
 const ssLayoutScan = known => ({
   appName: 'Upload düzeni taraması',
   noCart: true,
+  timeoutMs: 900000, // ürünler sırayla açıldığı için 4 dk sınırı yetmez
   accepts: /$^/,
   matrixFiles: /$^/,
   async run(page, step, file, notes) {
@@ -299,20 +304,16 @@ const ssLayoutScan = known => ({
         if (!j.products?.length) break;
         list.push(...j.products.map(p => ({ handle: p.handle, title: p.title })));
       }
-      const pages = await Promise.all([0, 1, 2].map(() => page.context().newPage()));
-      const queue = [...list], found = [];
-      await Promise.all(pages.map(async pg => {
-        while (queue.length) {
-          const p = queue.shift();
-          try {
-            await pg.goto(`${new URL(page.url()).origin}/products/${p.handle}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
-            await pg.locator(SS_WIDGET).first().waitFor({ state: 'attached', timeout: 20000 }).catch(() => {});
-            const areas = await pg.evaluate(() => [...document.querySelectorAll('input[type=file][id^="file-input-"]')].map(f => f.id.replace(/^file-input-/, '').split('-')[0]));
-            found.push({ ...p, layout: areas.join(',') });
-          } catch (e) { found.push({ ...p, error: e.message.split('\n')[0].slice(0, 80) }); }
-        }
-        await pg.close().catch(() => {});
-      }));
+      // Sıralı: aynı oturumda tek sekme, ürünler tek tek açılır
+      const origin = new URL(page.url()).origin, found = [];
+      for (const p of list) {
+        try {
+          await page.goto(`${origin}/products/${p.handle}`, { waitUntil: 'domcontentloaded', timeout: 45000 });
+          await page.locator(SS_WIDGET).first().waitFor({ state: 'attached', timeout: 20000 }).catch(() => {});
+          const areas = await page.evaluate(() => [...document.querySelectorAll('input[type=file][id^="file-input-"]')].map(f => f.id.replace(/^file-input-/, '').split('-')[0]));
+          found.push({ ...p, layout: areas.join(',') });
+        } catch (e) { found.push({ ...p, error: e.message.split('\n')[0].slice(0, 80) }); }
+      }
       const none = found.filter(f => !f.error && !f.layout), errs = found.filter(f => f.error);
       const unknown = found.filter(f => f.layout && !known.includes(f.layout));
       const groups = new Set(found.filter(f => f.layout).map(f => f.layout));
