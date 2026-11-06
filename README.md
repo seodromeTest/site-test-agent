@@ -1,24 +1,31 @@
 # site-test-agent
 
-E-ticaret sitelerimizin satış akışlarını gerçek bir tarayıcıyla (Playwright / Chrome) otomatik test eder.
+E-ticaret sitelerimizin satış akışlarını gerçek tarayıcılarla (Playwright: Chrome, Firefox, Safari) otomatik test eder.
 Sonuçlar Make webhook'una gönderilir, Make Gmail ile maili atar.
 
 ## Ne test ediliyor?
 - **Ana fonksiyonlar** (her site): ana sayfa → arama → ürün sayfası → Add to cart → sepet → Checkout butonu
 - **Upload akışları** (upload ürünü olan siteler): test görseli yüklenir → fiyat/ölçü hesaplanır → sepete eklenir →
   sepette baskı dosyası linkinin oluştuğu ve açıldığı doğrulanır
-- **Genel testte ayrıca:** ana sayfadaki tüm site içi linkler
+- **Genel testte ayrıca:** menüler (masaüstü ve mobil), banner, ana sayfadaki tüm linkler, boş koleksiyonlar, footer,
+  sosyal medya, diğer siteler, canlı destek; Firefox ve Safari ile ana akış + bir upload ürünü
 
 Sipariş verilmez, ödeme yapılmaz. Hata gören akış otomatik olarak bir kez daha denenir.
 
-## Zamanlama (GitHub Actions)
-| Ne zaman | Tür | Mail |
-|---|---|---|
-| Her saat (:17) | `hourly` | Sadece yeni sorun (🚨 ACİL) veya düzelme (✅ Düzeldi) olursa |
-| Pazartesi 06:07 UTC | `full` | Her zaman genel rapor |
+## Zamanlama (Make → GitHub Actions)
+Testi Make başlatır (GitHub'a `workflow_dispatch` isteği), test GitHub Actions'ta çalışır, mail yine Make'ten gider.
+Saatler Berlin saatidir.
 
-Elle çalıştırmak için: **Actions → Site testleri → Run workflow**.
+| Ne zaman | Tür | Make senaryosu | Mail |
+|---|---|---|---|
+| Her pazartesi 05:30 | `full` (genel test, ~3 saat) | "Site testi – Haftalık genel test" | Her zaman, Excel ekli |
+| İstendiğinde | `full` | "Site testi – GitHub'da genel testi başlat (elle)" | Her zaman |
+| Saatlik | `hourly` | henüz kurulmadı | Sadece yeni sorun (ACİL) veya düzelme |
+
+Elle çalıştırmak için: Make'teki "(elle)" senaryosu ya da GitHub'da **Actions → Site testleri → Run workflow**.
+`sites` girilirse (tek site denemesi) mail gönderilmez.
 Sonuçlar ve hata ekran görüntüleri her turun sayfasında **Artifacts** altında 14 gün saklanır.
+Make'in kullandığı GitHub token'ı 3 Şubat 2027'de sona erer; yenilenmezse zamanlanmış testler başlamaz.
 
 ## Ayarlar
 - **Secret `MAKE_WEBHOOK_URL`**: Settings → Secrets and variables → Actions. Webhook adresi asla koda yazılmaz.
