@@ -38,7 +38,13 @@ function siteSummaryRow(s) {
     ${td(uploads.length ? `<span style="color:${upOk === uploads.length ? C.ok : C.bad};font-weight:600">${upOk}/${uploads.length}</span>` : `<span style="color:${C.muted}">upload yok</span>`)}
     ${td(s.genel ? (n => `<span style="color:${n ? C.bad : C.ok}">${n ? n + ' sorun' : 'sorun yok'} / ${s.genel.filter(x => x.durum === 'ok' || x.durum === 'hata').length} kontrol</span>`)(s.genel.filter(x => x.durum === 'hata').length)
       : s.links ? `<span style="color:${s.links.ok ? C.ok : C.bad}">${s.links.broken.length} kırık / ${s.links.total}</span>` : '<span style="color:#6e7781">—</span>')}
+    ${td((s.tarayicilar || []).length ? s.tarayicilar.map(t => {
+        const bad = t.error ? 1 : (t.flows || []).filter(f => !f.ok && !f.botBlock).length;
+        return `${esc(t.browser.replace(' (WebKit)', ''))} ${bad ? `<span style="color:${C.bad}">❌</span>` : `<span style="color:${C.ok}">✅</span>`}`;
+      }).join('<br>') : '<span style="color:#6e7781">—</span>', 'white-space:nowrap')}
     ${td(core?.homepageMs ? sec(core.homepageMs) : '—', 'white-space:nowrap')}
+    ${td((rows => { const n = rows.filter(r => r.durum === 'hata').length, k = rows.filter(r => r.durum === 'ok' || r.durum === 'hata').length;
+        return `<span style="color:${n ? C.bad : C.ok};font-weight:600">${n ? n + ' sorun' : 'sorun yok'}</span> / ${k} kontrol`; })(siteRows(s)), 'white-space:nowrap')}
   </tr>`;
 }
 
@@ -112,10 +118,10 @@ function build(run) {
   </div>` : ''}
 
   <h2 style="margin:0 0 4px">${isFull ? 'Genel site testi' : 'Saatlik kontrol'}</h2>
-  <div style="color:${C.muted};font-size:13px;margin-bottom:14px">${fmtDate(run.startedAt)} · ${run.sites.length} site · Süre: ${sec(run.ms)} · gerçek tarayıcı (Chrome)</div>
+  <div style="color:${C.muted};font-size:13px;margin-bottom:14px">${fmtDate(run.startedAt)} · ${run.sites.length} site · Süre: ${run.ms >= 3600000 ? `${Math.floor(run.ms / 3600000)} sa ${Math.round(run.ms % 3600000 / 60000)} dk` : run.ms >= 60000 ? `${Math.round(run.ms / 60000)} dk` : sec(run.ms)} · gerçek tarayıcı (${run.sites.some(x => x.tarayicilar?.length) ? 'Chrome, Firefox, Safari' : 'Chrome'})</div>
 
   <table style="border-collapse:collapse;width:100%;font-size:14px">
-    <tr style="background:${C.soft};text-align:left"><th style="padding:8px 10px">Site</th><th style="padding:8px 10px">Ana fonksiyonlar</th><th style="padding:8px 10px">Upload akışları</th><th style="padding:8px 10px">Genel kontroller</th><th style="padding:8px 10px">Ana sayfa</th></tr>
+    <tr style="background:${C.soft};text-align:left"><th style="padding:8px 10px">Site</th><th style="padding:8px 10px">Ana fonksiyonlar</th><th style="padding:8px 10px">Upload akışları</th><th style="padding:8px 10px">Genel kontroller</th><th style="padding:8px 10px">Firefox / Safari</th><th style="padding:8px 10px">Ana sayfa</th><th style="padding:8px 10px">Toplam (tüm kontroller)</th></tr>
     ${[...badSites, ...run.sites.filter(s => s.ok)].map(siteSummaryRow).join('')}
   </table>
 
