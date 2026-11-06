@@ -208,12 +208,14 @@ async function runFlow(browser, site, flow, demoBreak) {
     result.botBlock = await withTimeout(page.evaluate(async () => {
       // Sadece görünen doğrulama sayfası sayılır (Shopify sayfalarında challenge-platform scripti her zaman var, ölçüt olamaz)
       const re = /verify you are human|needs to be verified|checking your browser|just a moment/i;
-      if (re.test(document.title) || re.test((document.body?.innerText || '').slice(0, 3000))) return true;
+      // 'challenge' = doğrulama sayfası, 'ratelimit' = Shopify / uygulama hız sınırı (429, "Too many requests")
+      if (re.test(document.title) || re.test((document.body?.innerText || '').slice(0, 3000))) return 'challenge';
       try {
         const r = await fetch('/cart.js', { cache: 'no-store' });
-        if (r.status === 403 || r.status === 429) return true;
+        if (r.status === 429) return 'ratelimit';
+        if (r.status === 403) return 'challenge';
         const t = await r.text();
-        try { JSON.parse(t); return false; } catch (e) { return re.test(t); }
+        try { JSON.parse(t); return false; } catch (e) { return re.test(t) ? 'challenge' : false; }
       } catch (e) { return false; }
     }), 15000, 'botcheck').catch(() => false);
   }
