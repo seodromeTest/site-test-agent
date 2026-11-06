@@ -19,7 +19,8 @@ async function build(run) {
 
   const oz = wb.addWorksheet('Özet');
   oz.addRow([`Genel site testi – ${fmtDate(run.startedAt)}`]).font = { bold: true, size: 14 };
-  oz.addRow([`${run.sites.length} site · gerçek tarayıcı (Chrome) · sipariş verilmez, ödeme yapılmaz`]);
+  const br = run.sites.some(x => x.tarayicilar?.length) ? 'Chrome, Firefox, Safari' : 'Chrome';
+  oz.addRow([`${run.sites.length} site · gerçek tarayıcı (${br}) · sipariş verilmez, ödeme yapılmaz`]);
   oz.addRow([]);
   header(oz, ['Site', 'Kontrol', 'Başarılı', 'Sorun', 'Durum', 'Sorunlu kontroller']);
   for (const s of run.sites) {
@@ -39,7 +40,7 @@ async function build(run) {
     used.add(name);
     const ws = wb.addWorksheet(name);
     ws.addRow([`${s.name} – ${s.domain}`]).font = { bold: true, size: 14 };
-    ws.addRow([`Genel site testi · ${fmtDate(run.startedAt)} · gerçek tarayıcı (Chrome)`]);
+    ws.addRow([`Genel site testi · ${fmtDate(run.startedAt)} · gerçek tarayıcı (${br})`]);
     ws.addRow([]);
     header(ws, ['#', 'Bölüm', 'Kontrol edilen', 'Adres', 'Sonuç', 'Durum']);
     let n = 0;
