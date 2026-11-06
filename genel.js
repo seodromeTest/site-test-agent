@@ -47,13 +47,10 @@ const onScreen = page => page.evaluate(() => {
 }).catch(() => []);
 const newOnes = (before, after) => after.filter(x => !before.includes(x)).length;
 
-// Sınırlı paralellikle çalıştır
+// Sıralı çalıştır: linkler tek tek, biri bitmeden diğeri başlamaz (paralel istek yok)
 async function pool(items, n, fn) {
-  const out = new Array(items.length);
-  let i = 0;
-  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
-    while (i < items.length) { const k = i++; out[k] = await fn(items[k]); }
-  }));
+  const out = [];
+  for (const it of items) out.push(await fn(it));
   return out;
 }
 

@@ -30,7 +30,7 @@ const nextFixture = group => {
   return pool[fixtureIdx++ % pool.length];
 };
 
-const { withTimeout, shot, getCart, escRe, newPage, gotoOk } = require('./lib');
+const { withTimeout, shot, getCart, escRe, newPage, gotoOk, diagnose } = require('./lib');
 
 // Ana fonksiyonlar: ana sayfa → arama → ürün + sepete ekle → sepet → checkout butonu
 function coreFlow(site) {
@@ -112,7 +112,9 @@ function coreFlow(site) {
         const box = page.locator('label:has-text("agree") input[type=checkbox], input[type=checkbox][id*=agree i], input[type=checkbox][name*=agree i], input[type=checkbox][id*=terms i], input[type=checkbox][name*=terms i], input[type=checkbox][class*=terms i], input[type=checkbox][class*=condition i], terms-conditions input[type=checkbox], [class*=term] input[type=checkbox]').filter({ visible: true }).first();
         if (await box.count()) await box.check({ force: true }).catch(() => {});
         const btn = page.locator('[name=checkout], button:has-text("Checkout"), a:has-text("Checkout"), button:has-text("Check out")').filter({ visible: true }).first();
-        await Promise.all([page.waitForURL(/checkouts|authentication|account\./, { timeout: 45000 }), btn.click()]);
+        // Sıralı: önce tıkla, sonra yönlendirmeyi bekle (waitForURL sayfa zaten oradaysa hemen döner)
+        await btn.click();
+        await page.waitForURL(/checkouts|authentication|account\./, { timeout: 45000 });
         result.checkout = page.url().includes('/checkouts/') ? 'Ödeme sayfası açıldı' : 'Müşteri giriş sayfası açıldı';
       });
     },
@@ -120,18 +122,29 @@ function coreFlow(site) {
 }
 
 async function runFlow(browser, site, flow, demoBreak) {
-  const { ctx, page, jsErrors } = await newPage(browser);
+  const { ctx, page, jsErrors, log } = await newPage(browser);
   const file = nextFixture(flow.fixture);
   const result = { id: flow.id, title: flow.title, app: flow.appName, url: flow.url, ok: true, steps: [], notes: [] };
   const t0 = Date.now();
+  // Adımlar kesinlikle sıralı: bir adım (ve sayfanın o adımda başlattığı istekler) bitmeden sonraki başlamaz.
+  // Adım sırasında kaydedilen konsol/ağ olayları o adıma yazılır; hata teşhisi bunlarla yapılır.
+  const siteHost = new URL(site.base).hostname;
   const step = async (name, fn) => {
-    const s = Date.now();
+    const s = Date.now(), m = log.mark();
     if (DEBUG) console.log(`  … ${site.domain}/${flow.id}: ${name}`);
+    const summary = evts => {
+      const c = evts.filter(e => e.kind !== 'network' && e.level === 'error').length, n = evts.filter(e => e.kind === 'network' && !e.asset).length;
+      return c || n ? { konsolHata: c, agHata: n } : {};
+    };
     try {
       await fn();
-      result.steps.push({ name, ok: true, ms: Date.now() - s });
+      const pending = await log.settle();
+      const evts = log.since(m);
+      result.steps.push({ name, ok: true, ms: Date.now() - s, ...summary(evts), ...(pending ? { bekleyenIstek: pending } : {}) });
     } catch (e) {
-      result.steps.push({ name, ok: false, ms: Date.now() - s, error: e.message.split('\n')[0].slice(0, 300) });
+      await log.settle(4000);
+      const evts = log.since(m);
+      result.steps.push({ name, ok: false, ms: Date.now() - s, error: e.message.split('\n')[0].slice(0, 300), ...summary(evts), tani: diagnose(evts, siteHost) });
       throw e;
     }
   };
@@ -143,7 +156,7 @@ async function runFlow(browser, site, flow, demoBreak) {
       await page.waitForTimeout(3000);
     });
     result.file = path.basename(file);
-    await flow.run(page, step, file, result.notes);
+    await flow.run(page, step, file, result.notes, { log });
     if (flow.noCart) return; // sadece sayfa kontrolü
     let item;
     await step('Sepet doğrulama', async () => {
@@ -182,7 +195,7 @@ async function runFlow(browser, site, flow, demoBreak) {
   };
   try {
     // Hiçbir akış 4 dakikadan uzun sürmesin
-    await withTimeout(flow.id === 'core' ? flow.run(page, step, file, result.notes, result) : uploadBody(), 240000, 'Akış');
+    await withTimeout(flow.id === 'core' ? flow.run(page, step, file, result.notes, result) : uploadBody(), flow.timeoutMs || 240000, 'Akış');
   } catch (e) {
     result.ok = false;
     if (!result.steps.some(s => !s.ok)) {
@@ -206,6 +219,9 @@ async function runFlow(browser, site, flow, demoBreak) {
   }
   result.ms = Date.now() - t0;
   if (jsErrors.length) result.jsErrors = [...new Set(jsErrors)].slice(0, 5);
+  // Akış boyunca konsola düşen hatalar (başarılı akışlarda da raporda bilgi olarak görünür)
+  const konsol = [...new Set(log.events.filter(e => e.kind === 'console' && e.level === 'error').map(e => e.text.slice(0, 160)))];
+  if (konsol.length) result.konsol = konsol.slice(0, 5);
   await withTimeout(ctx.close(), 15000, 'close').catch(() => {});
   return result;
 }
@@ -248,6 +264,12 @@ async function linkCheck(browser, site) {
 // Genel testte bot korumasına takılmamak için yavaş git: sepete ekleyen akışlar arasında 20–30 sn,
 // siteler arasında 60 sn bekle (müşteri gibi). Hızlı deneme için NO_PACE=1.
 const PACE = MODE === 'full' && !process.env.NO_PACE;
+// Süre güvenliği: GitHub işi 355 dk'da keser ve o zaman mail hiç gitmez. 300 dk dolunca genel kontrol ve
+// tarayıcı testleri atlanır, rapor yine gönderilir (atlananlar raporda "süre yetmedi" olarak görünür).
+const RUN_START = Date.now();
+const BUDGET_MS = +(process.env.BUDGET_MIN || 300) * 60000;
+const overBudget = () => Date.now() - RUN_START > BUDGET_MS;
+const SKIP_ROW = (bolum, adres) => ({ bolum, kontrol: 'Kontrol', adres, sonuc: 'Yapılamadı: testin toplam süre sınırı doldu (rapor gönderilebilsin diye atlandı)', durum: 'yapilmadi' });
 const rest = (min, max) => PACE ? new Promise(r => setTimeout(r, min * 1000 + Math.random() * (max - min) * 1000)) : Promise.resolve();
 const retryWait = r => PACE ? (r.botBlock ? 120 : 45) : (r.botBlock ? 60 : 0);
 
@@ -277,8 +299,11 @@ async function testSite(browser, site, isFirstSite) {
   }
   // Genel testte ana sayfanın tamamı: menü, banner, linkler, koleksiyonlar, footer, sosyal medya, mobil menü, chat
   let genel = null, links = null;
-  if (MODE === 'full' && (!ONLY || ONLY.split(',').includes('genel'))) {
-    genel = await withTimeout(require('./genel').genelKontrol(browser, site), 900000, 'Genel kontrol')
+  if (MODE === 'full' && (!ONLY || ONLY.split(',').includes('genel')) && overBudget()) {
+    genel = [SKIP_ROW('Genel kontroller (menü, linkler, footer, mobil)', site.base)];
+  } else if (MODE === 'full' && (!ONLY || ONLY.split(',').includes('genel'))) {
+    // Linkler artık tek tek (sıralı) kontrol edildiği için büyük sitelerde süre uzun: 30 dk sınır
+    genel = await withTimeout(require('./genel').genelKontrol(browser, site), 1800000, 'Genel kontrol')
       .catch(e => [{ bolum: 'Ana sayfa', kontrol: 'Genel kontrol', adres: site.base, sonuc: `Sorun: ${e.message.split('\n')[0]}`, durum: 'hata' }]);
     const bad = genel.filter(r => r.durum === 'hata');
     const linkRows = genel.filter(r => r.adres && /link|Sosyal|Diğer/.test(r.bolum));
@@ -312,6 +337,7 @@ async function testSite(browser, site, isFirstSite) {
       }
       for (const [i, name] of SITES.entries()) {
         const site = require(`./sites/${name}`);
+        if (overBudget()) { (sites[i].tarayicilar ||= []).push({ browser: label, error: 'Yapılamadı: testin toplam süre sınırı doldu (rapor gönderilebilsin diye atlandı)', skipped: true }); continue; }
         const out = [];
         for (const flow of [coreFlow(site), site.flows.find(f => !f.noCart)].filter(Boolean)) {
           await rest(20, 30);
