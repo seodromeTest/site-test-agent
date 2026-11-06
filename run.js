@@ -129,6 +129,8 @@ async function runFlow(browser, site, flow, demoBreak) {
   // Adımlar kesinlikle sıralı: bir adım (ve sayfanın o adımda başlattığı istekler) bitmeden sonraki başlamaz.
   // Adım sırasında kaydedilen konsol/ağ olayları o adıma yazılır; hata teşhisi bunlarla yapılır.
   const siteHost = new URL(site.base).hostname;
+  const ranges = []; // her adımın oturum kaydındaki aralığı: hata hangi adımda olduysa oraya yazılır
+  const CART_STEP = /^(Sepete ekle|Add to cart butonu|Save & Add to Cart)$/;
   const step = async (name, fn) => {
     const s = Date.now(), m = log.mark();
     if (DEBUG) console.log(`  … ${site.domain}/${flow.id}: ${name}`);
@@ -136,15 +138,24 @@ async function runFlow(browser, site, flow, demoBreak) {
       const c = evts.filter(e => e.kind !== 'network' && e.level === 'error').length, n = evts.filter(e => e.kind === 'network' && !e.asset).length;
       return c || n ? { konsolHata: c, agHata: n } : {};
     };
+    // Önceki adımlarda olan hatalar (ör. sepete ekleme isteği reddedildi ama hata bir sonraki adımda fark edildi)
+    const earlier = () => ranges.flatMap(r => diagnose(log.events.slice(r.from, r.to), siteHost).map(t => `${r.name} adımında: ${t}`));
     try {
       await fn();
       const pending = await log.settle();
       const evts = log.since(m);
+      // Sepete ekleme adımı: tıklamak yetmez, sayfanın gönderdiği sepete ekleme isteği reddedildiyse adım burada başarısız
+      if (CART_STEP.test(name)) {
+        const rej = evts.find(e => e.kind === 'network' && e.status >= 400 && /\/cart\/add/.test(e.url));
+        if (rej) throw new Error(`Sepete ekleme isteği reddedildi: ${rej.method} ${new URL(rej.url).pathname} → HTTP ${rej.status}${rej.text ? ` (${rej.text.slice(0, 160)})` : ''}`);
+      }
+      ranges.push({ name, from: m, to: log.mark() });
       result.steps.push({ name, ok: true, ms: Date.now() - s, ...summary(evts), ...(pending ? { bekleyenIstek: pending } : {}) });
     } catch (e) {
       await log.settle(4000);
       const evts = log.since(m);
-      result.steps.push({ name, ok: false, ms: Date.now() - s, error: e.message.split('\n')[0].slice(0, 300), ...summary(evts), tani: diagnose(evts, siteHost) });
+      const tani = [...diagnose(evts, siteHost), ...earlier()].slice(0, 6);
+      result.steps.push({ name, ok: false, ms: Date.now() - s, error: e.message.split('\n')[0].slice(0, 300), ...summary(evts), tani });
       throw e;
     }
   };
@@ -208,12 +219,14 @@ async function runFlow(browser, site, flow, demoBreak) {
     result.botBlock = await withTimeout(page.evaluate(async () => {
       // Sadece görünen doğrulama sayfası sayılır (Shopify sayfalarında challenge-platform scripti her zaman var, ölçüt olamaz)
       const re = /verify you are human|needs to be verified|checking your browser|just a moment/i;
-      if (re.test(document.title) || re.test((document.body?.innerText || '').slice(0, 3000))) return true;
+      // 'challenge' = doğrulama sayfası, 'ratelimit' = Shopify / uygulama hız sınırı (429, "Too many requests")
+      if (re.test(document.title) || re.test((document.body?.innerText || '').slice(0, 3000))) return 'challenge';
       try {
         const r = await fetch('/cart.js', { cache: 'no-store' });
-        if (r.status === 403 || r.status === 429) return true;
+        if (r.status === 429) return 'ratelimit';
+        if (r.status === 403) return 'challenge';
         const t = await r.text();
-        try { JSON.parse(t); return false; } catch (e) { return re.test(t); }
+        try { JSON.parse(t); return false; } catch (e) { return re.test(t) ? 'challenge' : false; }
       } catch (e) { return false; }
     }), 15000, 'botcheck').catch(() => false);
   }
