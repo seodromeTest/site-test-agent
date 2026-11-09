@@ -39,7 +39,7 @@ async function newPage(browser, opts) {
 const ASSET = /\.(png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|css)(\?|$)/i;
 // Sitenin çalışmasıyla ilgisi olmayan, her Shopify sitesinde görülen kayıtlar: analitik/piksel (bir kısmını biz engelliyoruz),
 // Shop Pay ön yüklemeleri, piksel sandbox uyarıları. Bunlar teşhiste ve konsol özetinde gösterilmez.
-const NOISE = /shop\.app|pay\.shopify|monorail|\/api\/collect|web-pixels|\/wpm\/|\/wpm@|analytics|clarity|pixel|sandboxed environment|Blocked a frame with origin "null"|importScripts|was preloaded using link preload|shopify_pay\/accelerated_checkout|checkout-web\/assets|klaviyo|facebook|tiktok|pinterest|googletagmanager|gtag|doubleclick|bing\.com/i;
+const NOISE = /shop\.app|pay\.shopify|monorail|\/api\/collect|web-pixels|\/wpm\/|\/wpm@|analytics|clarity|pixel|sandboxed environment|Blocked a frame with origin "null"|importScripts|was preloaded using link preload|shopify_pay\/accelerated_checkout|checkout-web\/assets|klaviyo|facebook|tiktok|pinterest|googletagmanager|gtag|doubleclick|bing\.com|_shopify_test|has been rejected for invalid domain|NetworkError when attempting to fetch resource|Unsafe attempt to load URL https:\/\/cdn\.shopify\.com\/shopifycloud\/customer-authentication/i;
 const isNoise = e => NOISE.test(e.url || '') || NOISE.test(e.text || '');
 const LIFECYCLE = new Set(['fetch', 'xhr', 'document']); // adımın bitmesi beklenen istekler
 function sessionLog(page, blocked) {
