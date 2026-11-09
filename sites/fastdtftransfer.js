@@ -10,6 +10,8 @@ module.exports = {
   name: 'FastDTF Transfer',
   domain: 'fastdtftransfer.com',
   base: BASE,
+  // En çok upload ürünü olan site: art arda testte Shopify hız sınırına (429) takılıyor, akışlar arası daha uzun bekle
+  slowPace: true,
   // Saatlik ana fonksiyon testi: arama + normal ürünle sepete ekle + checkout
   core: { search: 'film', products: ['uv-dtf-a-b-film-roll-24-325', 'dtf-printhead-cleaning-solution-500ml'] },
   flows: [

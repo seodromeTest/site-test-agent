@@ -229,6 +229,13 @@ async function runFlow(browser, site, flow, demoBreak) {
         try { JSON.parse(t); return false; } catch (e) { return re.test(t) ? 'challenge' : false; }
       } catch (e) { return false; }
     }), 15000, 'botcheck').catch(() => false);
+    // Sayfa hiç açılamadıysa yukarıdaki kontrol çalışamaz: oturum kaydına bak. Siteden 429 geldiyse hız sınırı,
+    // Cloudflare doğrulama (challenges.cloudflare.com / captcha) istekleri varsa bot koruması.
+    if (!result.botBlock) {
+      const net = log.events.filter(e => e.kind === 'network');
+      if (net.some(e => e.status === 429 && log.host(e.url).endsWith(siteHost.replace(/^www\./, '')))) result.botBlock = 'ratelimit';
+      else if (net.some(e => /challenges\.cloudflare\.com|cloudflarecaptcha\.com/.test(e.url))) result.botBlock = 'challenge';
+    }
   }
   result.ms = Date.now() - t0;
   if (jsErrors.length) result.jsErrors = [...new Set(jsErrors)].slice(0, 5);
@@ -290,7 +297,8 @@ async function testSite(browser, site, isFirstSite) {
   const flows = [];
   const all = [coreFlow(site), ...site.flows].filter(f => !ONLY || ONLY.split(',').includes(f.id));
   for (const [k, flow] of all.entries()) {
-    if (k > 0) await (flow.noCart ? rest(3, 6) : rest(20, 30));
+    // Çok upload ürünü olan ve hız sınırına takılan sitelerde (site dosyasında slowPace) daha uzun ara
+    if (k > 0) await (flow.noCart ? rest(3, 6) : site.slowPace ? rest(45, 60) : rest(20, 30));
     const demoBreak = FAIL_DEMO && isFirstSite && flow === all.find(f => f.id !== 'core');
     let r = await runFlow(browser, site, flow, demoBreak);
     // Geçici bir aksaklığı hata saymamak için başarısız akışı bir kez tekrar dene
@@ -353,7 +361,7 @@ async function testSite(browser, site, isFirstSite) {
         if (overBudget()) { (sites[i].tarayicilar ||= []).push({ browser: label, error: 'Yapılamadı: testin toplam süre sınırı doldu (rapor gönderilebilsin diye atlandı)', skipped: true }); continue; }
         const out = [];
         for (const flow of [coreFlow(site), site.flows.find(f => !f.noCart)].filter(Boolean)) {
-          await rest(20, 30);
+          await (site.slowPace ? rest(90, 120) : rest(20, 30));
           let r = await runFlow(b, site, flow, false).catch(e => ({ id: flow.id, title: flow.title, url: flow.url, ok: false, steps: [{ name: 'Başlatma', ok: false, error: e.message.split('\n')[0] }], notes: [] }));
           if (!r.ok) {
             const first = r.steps.find(s => !s.ok);
