@@ -48,8 +48,8 @@ Make senaryoları (team 1840541, saat dilimi Berlin):
   `excel.js` Excel. `lib.js` tarayıcı oturumu, pop-up gizleme, oturum kaydı, teşhis.
 - `sites/*.js` 16 site (fastdtf* önce çalışır). `fixtures/` test görselleri. `matrix.js` dosya türü matrisi
   (ayrı araç, gece testinde yok; hâlâ paralel çalışıyor, sıralıya çevrilmeli).
-- Yerel çalıştırma: `node run.js --mode full --sites <site> --only <akış-id,...>` (argümanlar boşlukla). Bu
-  ortamda node `fetch` dışarı çıkamıyor; "Baskı dosyası erişilebilir" adımı yerelde hep "fetch failed" verir, GitHub'da çalışır.
+- Yerel çalıştırma: `node run.js --mode full --sites <site> --only <akış-id,...>` (argümanlar boşlukla). Bu ortamda
+  node `fetch` için `NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt` gerekir (yoksa "fetch failed").
 
 ## Kullanıcının onayladığı istisnalar (hata sayılmaz)
 Rehber linki yeni sekmede açılıyor; materyal kartları koleksiyona gidiyor; Ask a question / Delivery & Return / Share
@@ -75,15 +75,17 @@ Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış a
 - Gündüz deneme yok: kod hazırlanır, gece tek tur denenir, sonra Make'te saatlik senaryo kurulur
   (10116955'in kopyası, `inputs.mode=hourly`).
 
-## Onaylanan iş (16 Kasım): yanlış alarmları azaltmak
-Kullanıcı "bitince yazarım, o zaman başla" dedi; başlamadan önce onayını bekle.
-1. Rapora girmeden ikinci kontrol: genel kontrolde "hata" çıkan her satır test sonunda başka yöntemle (gerçek tarayıcıyla
-   sayfayı açıp ürün/sayfa görünüyor mu, menüde farklı bekleme) tekrar denenir; çalışıyorsa "Not" olur, "Sorun" olmaz.
-2. Genel kontrollerde de 429 / doğrulama sayfası = "kontrol edilemedi", "Sorun" değil. "Sorun" sadece gerçek hatalı cevap
-   (404, 500, boş sayfa, reddedilen sepet isteği).
-3. Geçmiş yanlış alarmlar için kalıcı deneme listesi (Chili menü hover, Alpha yönlendirilen koleksiyon, Eagle
-   /collections/vendors?q=, Shopify sayfalarındaki challenge-platform scripti, Firefox 429); kod değişince önce bunlar çalışır.
-4. Her haftalık rapordan sonra kullanıcı yazınca yeni bulgular incelenir; yanlış alarm → düzeltme + 3. listeye ekleme.
+## Yanlış alarmları azaltma (16 Kasım, yapıldı)
+- "Sorun" sadece gerçek hatalı cevap (404/410, 5xx, bağlantı yok, boş koleksiyon, reddedilen sepet isteği). Hız sınırı (429)
+  ve güvenlik doğrulaması = "Kontrol edilemedi" (durum `yapilmadi`), sorun sayılmaz. Dış siteler (sosyal medya) otomatik
+  erişimi engelliyorsa (999, 403, doğrulama) adres doğru sayılır. (`genel.js` linkResult)
+- İkinci kontrol (`genel.js` ikinciKontrol): genel kontrolde "hata" çıkan her satır, test sonunda gerçek tarayıcıyla, ayrı
+  oturumda, daha uzun beklemeyle tekrar denenir (link, koleksiyon, menü, mobil menü, slider, görsel). Çalışıyorsa "Not"
+  (bilgi), aynıysa "ikinci kontrolde de doğrulandı". /admin linki ve mobil taşma tekrar denenmez (kesin sonuç).
+- Kalıcı denemeler: `denemeler.js`. Çevrimdışı kısım her PR'da GitHub'da çalışır (`.github/workflows/denemeler.yml`).
+  Canlı kısım (`--canli`, gerçek sitelere okuma istekleri) kod değişince PR açmadan önce elle çalıştırılır.
+  **Her yeni yanlış alarm düzeltildiğinde buraya bir deneme eklenir**; gerçek sorunlar da kontrol olarak durur.
+- Her haftalık rapordan sonra kullanıcı yazınca yeni bulgular incelenir; yanlış alarm → düzeltme + deneme.
 
 ## Diğer bekleyenler
 Login testi (ayrı test Gmail hesabı + uygulama şifresi GitHub secret olarak; henüz yok). Carousel "View Options"

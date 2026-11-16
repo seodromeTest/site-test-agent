@@ -1,0 +1,26 @@
+name: Yanlış alarm denemeleri
+
+# Test kodu değiştiğinde (PR) geçmiş yanlış alarmların geri gelmediğini kontrol eder.
+# Sadece çevrimdışı denemeler: sitelere bağlanmaz, tarayıcı açmaz, birkaç saniye sürer.
+# Canlı denemeler (gerçek sitelere okuma istekleri) elle: node denemeler.js --canli
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  denemeler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            .github
+            sites
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node denemeler.js
