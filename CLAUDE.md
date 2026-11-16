@@ -59,7 +59,8 @@ sadece bilgi; By Size düşük çözünürlük uyarısı vermiyor; Facebook = fa
 DTF Nash "Custom DTF Transfers By Size": GS Studio sepete ekleyemiyor, `POST /cart/add.js → 422 Cannot find variant`
 (3 tarayıcıda). DTF Nash sayfasında "Unexpected token '}'" JS hatası, YouTube @dtfnash 404. Gangsheet.com ana sayfa
 "Blank Apparel" sekmesinde tema örnek kartları (/admin'e gidiyor). Everyday "Same Day" menüsü boş koleksiyon
-(/collections/rush-orders). Kullanıcı ekibe iletti.
+(/collections/rush-orders). Kullanıcı ekibe iletti. 16 Kasım testinde hâlâ: DTF Nash, Everyday, Gangsheet.
+Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış alarmdı, PR #18 ile düzeltildi.
 
 ## Sıradaki iş: saatlik kontrol (onaylanan plan)
 - Her saat, her sitede: ana sayfa (süre ölçümü) + core akış + **sırayla değişen tek bir upload ürünü** (her saat
@@ -73,6 +74,16 @@ DTF Nash "Custom DTF Transfers By Size": GS Studio sepete ekleyemiyor, `POST /ca
 - Upload uygulamalarının yükleme/depolama sınırları kullanıcıya soruldu (saatte ~16 yükleme ≈ günde ~380 dosya).
 - Gündüz deneme yok: kod hazırlanır, gece tek tur denenir, sonra Make'te saatlik senaryo kurulur
   (10116955'in kopyası, `inputs.mode=hourly`).
+
+## Onaylanan iş (16 Kasım): yanlış alarmları azaltmak
+Kullanıcı "bitince yazarım, o zaman başla" dedi; başlamadan önce onayını bekle.
+1. Rapora girmeden ikinci kontrol: genel kontrolde "hata" çıkan her satır test sonunda başka yöntemle (gerçek tarayıcıyla
+   sayfayı açıp ürün/sayfa görünüyor mu, menüde farklı bekleme) tekrar denenir; çalışıyorsa "Not" olur, "Sorun" olmaz.
+2. Genel kontrollerde de 429 / doğrulama sayfası = "kontrol edilemedi", "Sorun" değil. "Sorun" sadece gerçek hatalı cevap
+   (404, 500, boş sayfa, reddedilen sepet isteği).
+3. Geçmiş yanlış alarmlar için kalıcı deneme listesi (Chili menü hover, Alpha yönlendirilen koleksiyon, Eagle
+   /collections/vendors?q=, Shopify sayfalarındaki challenge-platform scripti, Firefox 429); kod değişince önce bunlar çalışır.
+4. Her haftalık rapordan sonra kullanıcı yazınca yeni bulgular incelenir; yanlış alarm → düzeltme + 3. listeye ekleme.
 
 ## Diğer bekleyenler
 Login testi (ayrı test Gmail hesabı + uygulama şifresi GitHub secret olarak; henüz yok). Carousel "View Options"
