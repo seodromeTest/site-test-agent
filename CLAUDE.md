@@ -48,8 +48,8 @@ Make senaryoları (team 1840541, saat dilimi Berlin):
   `excel.js` Excel. `lib.js` tarayıcı oturumu, pop-up gizleme, oturum kaydı, teşhis.
 - `sites/*.js` 16 site (fastdtf* önce çalışır). `fixtures/` test görselleri. `matrix.js` dosya türü matrisi
   (ayrı araç, gece testinde yok; hâlâ paralel çalışıyor, sıralıya çevrilmeli).
-- Yerel çalıştırma: `node run.js --mode full --sites <site> --only <akış-id,...>` (argümanlar boşlukla). Bu
-  ortamda node `fetch` dışarı çıkamıyor; "Baskı dosyası erişilebilir" adımı yerelde hep "fetch failed" verir, GitHub'da çalışır.
+- Yerel çalıştırma: `node run.js --mode full --sites <site> --only <akış-id,...>` (argümanlar boşlukla). Bu ortamda
+  node `fetch` için `NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt` gerekir (yoksa "fetch failed").
 
 ## Kullanıcının onayladığı istisnalar (hata sayılmaz)
 Rehber linki yeni sekmede açılıyor; materyal kartları koleksiyona gidiyor; Ask a question / Delivery & Return / Share
@@ -59,7 +59,8 @@ sadece bilgi; By Size düşük çözünürlük uyarısı vermiyor; Facebook = fa
 DTF Nash "Custom DTF Transfers By Size": GS Studio sepete ekleyemiyor, `POST /cart/add.js → 422 Cannot find variant`
 (3 tarayıcıda). DTF Nash sayfasında "Unexpected token '}'" JS hatası, YouTube @dtfnash 404. Gangsheet.com ana sayfa
 "Blank Apparel" sekmesinde tema örnek kartları (/admin'e gidiyor). Everyday "Same Day" menüsü boş koleksiyon
-(/collections/rush-orders). Kullanıcı ekibe iletti.
+(/collections/rush-orders). Kullanıcı ekibe iletti. 16 Kasım testinde hâlâ: DTF Nash, Everyday, Gangsheet.
+Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış alarmdı, PR #18 ile düzeltildi.
 
 ## Sıradaki iş: saatlik kontrol (onaylanan plan)
 - Her saat, her sitede: ana sayfa (süre ölçümü) + core akış + **sırayla değişen tek bir upload ürünü** (her saat
@@ -73,6 +74,18 @@ DTF Nash "Custom DTF Transfers By Size": GS Studio sepete ekleyemiyor, `POST /ca
 - Upload uygulamalarının yükleme/depolama sınırları kullanıcıya soruldu (saatte ~16 yükleme ≈ günde ~380 dosya).
 - Gündüz deneme yok: kod hazırlanır, gece tek tur denenir, sonra Make'te saatlik senaryo kurulur
   (10116955'in kopyası, `inputs.mode=hourly`).
+
+## Yanlış alarmları azaltma (16 Kasım, yapıldı)
+- "Sorun" sadece gerçek hatalı cevap (404/410, 5xx, bağlantı yok, boş koleksiyon, reddedilen sepet isteği). Hız sınırı (429)
+  ve güvenlik doğrulaması = "Kontrol edilemedi" (durum `yapilmadi`), sorun sayılmaz. Dış siteler (sosyal medya) otomatik
+  erişimi engelliyorsa (999, 403, doğrulama) adres doğru sayılır. (`genel.js` linkResult)
+- İkinci kontrol (`genel.js` ikinciKontrol): genel kontrolde "hata" çıkan her satır, test sonunda gerçek tarayıcıyla, ayrı
+  oturumda, daha uzun beklemeyle tekrar denenir (link, koleksiyon, menü, mobil menü, slider, görsel). Çalışıyorsa "Not"
+  (bilgi), aynıysa "ikinci kontrolde de doğrulandı". /admin linki ve mobil taşma tekrar denenmez (kesin sonuç).
+- Kalıcı denemeler: `denemeler.js`. Çevrimdışı kısım her PR'da GitHub'da çalışır (`.github/workflows/denemeler.yml`).
+  Canlı kısım (`--canli`, gerçek sitelere okuma istekleri) kod değişince PR açmadan önce elle çalıştırılır.
+  **Her yeni yanlış alarm düzeltildiğinde buraya bir deneme eklenir**; gerçek sorunlar da kontrol olarak durur.
+- Her haftalık rapordan sonra kullanıcı yazınca yeni bulgular incelenir; yanlış alarm → düzeltme + deneme.
 
 ## Diğer bekleyenler
 Login testi (ayrı test Gmail hesabı + uygulama şifresi GitHub secret olarak; henüz yok). Carousel "View Options"

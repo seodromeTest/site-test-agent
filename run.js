@@ -30,7 +30,7 @@ const nextFixture = group => {
   return pool[fixtureIdx++ % pool.length];
 };
 
-const { withTimeout, shot, getCart, escRe, newPage, gotoOk, diagnose } = require('./lib');
+const { withTimeout, shot, getCart, escRe, newPage, gotoOk, diagnose, botCheck, botFromLog } = require('./lib');
 
 // Ana fonksiyonlar: ana sayfa → arama → ürün + sepete ekle → sepet → checkout butonu
 function coreFlow(site) {
@@ -216,26 +216,9 @@ async function runFlow(browser, site, flow, demoBreak) {
     result.screenshot = await withTimeout(shot(page), 15000, 'shot').catch(() => null);
     // Test sunucusu (GitHub, veri merkezi IP'si) Shopify/Cloudflare bot korumasına takılmış olabilir:
     // sayfada "Verify you are human" ya da sepet isteği challenge dönüyorsa bu site hatası değildir
-    result.botBlock = await withTimeout(page.evaluate(async () => {
-      // Sadece görünen doğrulama sayfası sayılır (Shopify sayfalarında challenge-platform scripti her zaman var, ölçüt olamaz)
-      const re = /verify you are human|needs to be verified|checking your browser|just a moment/i;
-      // 'challenge' = doğrulama sayfası, 'ratelimit' = Shopify / uygulama hız sınırı (429, "Too many requests")
-      if (re.test(document.title) || re.test((document.body?.innerText || '').slice(0, 3000))) return 'challenge';
-      try {
-        const r = await fetch('/cart.js', { cache: 'no-store' });
-        if (r.status === 429) return 'ratelimit';
-        if (r.status === 403) return 'challenge';
-        const t = await r.text();
-        try { JSON.parse(t); return false; } catch (e) { return re.test(t) ? 'challenge' : false; }
-      } catch (e) { return false; }
-    }), 15000, 'botcheck').catch(() => false);
-    // Sayfa hiç açılamadıysa yukarıdaki kontrol çalışamaz: oturum kaydına bak. Siteden 429 geldiyse hız sınırı,
-    // Cloudflare doğrulama (challenges.cloudflare.com / captcha) istekleri varsa bot koruması.
-    if (!result.botBlock) {
-      const net = log.events.filter(e => e.kind === 'network');
-      if (net.some(e => e.status === 429 && log.host(e.url).endsWith(siteHost.replace(/^www\./, '')))) result.botBlock = 'ratelimit';
-      else if (net.some(e => /challenges\.cloudflare\.com|cloudflarecaptcha\.com/.test(e.url))) result.botBlock = 'challenge';
-    }
+    // Test sunucusu (GitHub, veri merkezi IP'si) bot korumasına ya da Shopify hız sınırına takılmış olabilir:
+    // önce sayfanın kendisine, sayfa hiç açılamadıysa oturum kaydına bakılır (lib.js botCheck / botFromLog)
+    result.botBlock = (await botCheck(page)) || botFromLog(log.events, siteHost);
   }
   result.ms = Date.now() - t0;
   if (jsErrors.length) result.jsErrors = [...new Set(jsErrors)].slice(0, 5);

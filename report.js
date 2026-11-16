@@ -130,7 +130,7 @@ function build(run) {
   <p style="font-size:12px;color:${C.muted};margin-top:24px;border-top:1px solid ${C.line};padding-top:10px">
   <b>Ana fonksiyonlar:</b> ana sayfa, arama, ürün sayfası, Add to cart, sepet sayfası ve Checkout butonu.
   <b>Upload akışları:</b> test görseli yüklenir, sepete eklenir, sepette dosya linkinin oluştuğu ve açıldığı doğrulanır.
-  ${isFull ? '<b>Genel kontroller:</b> ana menü (masaüstünde alt menüler, telefonda hamburger menü), banner/slider, ana sayfadaki tüm linkler ve kartlar, koleksiyonların boş olup olmadığı, footer, sosyal medya, diğer sitelere linkler, canlı destek ve telefonda yana taşma. ' : ''}
+  ${isFull ? '<b>Genel kontroller:</b> ana menü (masaüstünde alt menüler, telefonda hamburger menü), banner/slider, ana sayfadaki tüm linkler ve kartlar, koleksiyonların boş olup olmadığı, footer, sosyal medya, diğer sitelere linkler, canlı destek ve telefonda yana taşma. "Sorun" çıkan her satır rapora girmeden gerçek tarayıcıyla ikinci kez kontrol edilir: çalışıyorsa "Not" olur, sonuç aynıysa "ikinci kontrolde de doğrulandı" yazar. Hız sınırı ya da güvenlik doğrulaması yüzünden kontrol edilemeyenler "Kontrol edilemedi" olarak ayrı yazılır, sorun sayılmaz. ' : ''}
   Sipariş verilmez, ödeme yapılmaz. Hata gören test otomatik olarak bir kez daha denenir.</p>
 </div>`;
 

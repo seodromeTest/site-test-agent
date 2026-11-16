@@ -114,4 +114,29 @@ async function gotoOk(page, url, opts = {}) {
   }
 }
 
-module.exports = { withTimeout, shot, getCart, escRe, newPage, gotoOk, diagnose };
+// Açık sayfada bot koruması / hız sınırı var mı. 'challenge' = doğrulama sayfası, 'ratelimit' = hız sınırı (429).
+// Sadece görünen doğrulama sayfası sayılır: Shopify sayfalarında challenge-platform scripti her zaman var, ölçüt olamaz.
+const CHALLENGE_TEXT = /verify you are human|needs to be verified|checking your browser|just a moment/i;
+const botCheck = page => withTimeout(page.evaluate(async src => {
+  const re = new RegExp(src, 'i');
+  if (re.test(document.title) || re.test((document.body?.innerText || '').slice(0, 3000))) return 'challenge';
+  try {
+    const r = await fetch('/cart.js', { cache: 'no-store' });
+    if (r.status === 429) return 'ratelimit';
+    if (r.status === 403) return 'challenge';
+    const t = await r.text();
+    try { JSON.parse(t); return false; } catch (e) { return re.test(t) ? 'challenge' : false; }
+  } catch (e) { return false; }
+}, CHALLENGE_TEXT.source), 15000, 'botcheck').catch(() => false);
+
+// Sayfa hiç açılamadıysa oturum kaydından: siteden 429 geldiyse hız sınırı, Cloudflare doğrulama istekleri varsa bot koruması
+function botFromLog(events, siteHost) {
+  const base = siteHost.replace(/^www\./, '');
+  const host = u => { try { return new URL(u).hostname; } catch (e) { return ''; } };
+  const net = events.filter(e => e.kind === 'network');
+  if (net.some(e => e.status === 429 && host(e.url).endsWith(base))) return 'ratelimit';
+  if (net.some(e => /challenges\.cloudflare\.com|cloudflarecaptcha\.com/.test(e.url))) return 'challenge';
+  return false;
+}
+
+module.exports = { withTimeout, shot, getCart, escRe, newPage, gotoOk, diagnose, botCheck, botFromLog, isNoise, CHALLENGE_TEXT };
