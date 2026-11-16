@@ -179,18 +179,32 @@ async function genelKontrol(browser, site) {
 
   // Koleksiyonlar boş mu
   const collections = [...new Set(unique.filter(u => isInternal(u) && /\/collections\/[^/?]+\/?$/.test(new URL(u).pathname) && !/\/collections\/all\/?$/.test(new URL(u).pathname)))];
+  // Sayfanın kendisinde (header/footer hariç) ürün linki var mı. Sayfa açılamazsa (429, doğrulama vb.) bilinmiyor = null.
+  const htmlHasProducts = async u => {
+    const r = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(20000) });
+    if (!r.ok) { r.body?.cancel().catch(() => {}); return null; }
+    const html = await r.text();
+    return /href="[^"]*\/products\/[^"]+"/.test(html.replace(/<header[\s\S]*?<\/header>|<footer[\s\S]*?<\/footer>/gi, ''));
+  };
   const counts = new Map(await pool(collections, 4, async u => {
     try {
+      // Shopify'ın marka/tür sayfaları (/collections/vendors?q=…, /collections/types?q=…) ürünleri adresteki
+      // q parametresine göre listeler: products.json ile sayılamaz, sayfanın kendisine bakılır
+      if (/\/collections\/(vendors|types)\/?$/.test(new URL(u).pathname)) {
+        const has = await htmlHasProducts(u);
+        return [u, has === false ? 0 : null];
+      }
       // Eski koleksiyon adresi yeni koleksiyona yönlendirilmiş olabilir: ürünleri yönlendirilen adresten say
       const page = await fetch(u, { redirect: 'follow', signal: AbortSignal.timeout(20000) });
       page.body?.cancel().catch(() => {});
       const final = new URL(page.url || u); final.search = ''; final.hash = '';
       const j = await fetch(final.href.replace(/\/$/, '') + '/products.json?limit=1', { signal: AbortSignal.timeout(20000) }).then(r => r.json());
       let n = Array.isArray(j.products) ? j.products.length : null;
-      // products.json bazı mağazalarda kapalı/filtreli: boş görünürse sayfanın kendisinde ürün linki var mı bak
+      // products.json bazı mağazalarda kapalı/filtreli: boş görünürse sayfanın kendisine bak.
+      // Sayfa açılamazsa "boş" deme (bilinmiyor).
       if (n === 0) {
-        const html = await fetch(u, { signal: AbortSignal.timeout(20000) }).then(r => r.text());
-        if (/href="[^"]*\/products\/[^"]+"/.test(html.replace(/<header[\s\S]*?<\/header>|<footer[\s\S]*?<\/footer>/gi, ''))) n = null;
+        const has = await htmlHasProducts(u);
+        if (has !== false) n = null;
       }
       return [u, n];
     } catch (e) { return [u, null]; }
