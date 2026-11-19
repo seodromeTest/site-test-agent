@@ -5,7 +5,7 @@
 // - Bu listede ürünü olmayan siteler: saatlik testte ana sayfa + normal bir ürünle Add to cart → sepet → checkout.
 // - haric: saatlik testte hiç olmayan siteler.
 module.exports = {
-  haric: ['gangsheet'],
+  haric: [],
   upload: [
     'https://www.dtftransferohio.com/products/premium-dtf-gang-sheets',
     'https://www.dtftransferohio.com/products/gang-sheet-builder-dtf-build',

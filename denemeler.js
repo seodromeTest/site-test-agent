@@ -69,16 +69,16 @@ async function deneme(ad, fn) {
   const { severity, alertState } = require('./uyari');
   const SAATLIK = require('./saatlik');
   const fs = require('fs');
-  await deneme('saatlik.js: her ürün kendi sitesinde testi olan bir akış (pageCheck değil), gangsheet.com yok', () => {
+  await deneme('saatlik.js: her ürün kendi sitesinde testi olan bir akış (pageCheck değil); gangsheet.com testten çıkarıldı', () => {
     const sites = fs.readdirSync(`${__dirname}/sites`).map(f => require(`./sites/${f}`));
     for (const u of SAATLIK.upload) {
       const url = new URL(u), site = sites.find(s => new URL(s.base).hostname.replace(/^www\./, '') === url.hostname.replace(/^www\./, ''));
       assert.ok(site, `site yok: ${u}`);
-      assert.ok(site.domain !== 'gangsheet.com', 'gangsheet saatlik listede olmamalı');
       const f = site.flows.find(x => x.id === url.pathname.split('/products/')[1]);
       assert.ok(f && !f.noCart, `testi olan akış yok: ${u}`);
     }
-    assert.ok(SAATLIK.haric.includes('gangsheet'));
+    // gangsheet.com 19 Kasım'da kullanıcının isteğiyle testten tamamen çıkarıldı
+    assert.ok(!sites.some(x => x.domain === 'gangsheet.com'), 'gangsheet.com testte olmamalı');
   });
   const flow = (steps, extra = {}) => ({ ok: !steps.some(s => !s.ok), steps, title: 'X', id: 'x', ...extra });
   const ok = n => ({ name: n, ok: true }), bad = (n, error = 'hata') => ({ name: n, ok: false, error });
