@@ -4,7 +4,7 @@ E-ticaret sitelerimizin satış akışlarını gerçek tarayıcılarla (Playwrig
 Sonuçlar Make webhook'una gönderilir, Make Gmail ile maili atar.
 
 ## Ne test ediliyor?
-- **Ana fonksiyonlar** (her site): ana sayfa → arama → ürün sayfası → Add to cart → sepet → Checkout butonu
+- **Ana fonksiyonlar** (her site): ana sayfa → arama → ürün sayfası → Add to cart → sepet → Checkout (ödeme sayfası açılıyor)
 - **Upload akışları** (upload ürünü olan siteler): test görseli yüklenir → fiyat/ölçü hesaplanır → sepete eklenir →
   sepette baskı dosyası linkinin oluştuğu ve açıldığı doğrulanır
 - **Genel testte ayrıca:** menüler (masaüstü ve mobil), banner, ana sayfadaki tüm linkler, boş koleksiyonlar, footer,
@@ -20,7 +20,11 @@ Saatler Berlin saatidir.
 |---|---|---|---|
 | Her pazartesi 05:30 | `full` (genel test, ~3 saat) | "Site testi – Haftalık genel test" | Her zaman, Excel ekli |
 | İstendiğinde | `full` | "Site testi – GitHub'da genel testi başlat (elle)" | Her zaman |
-| Saatlik | `hourly` | henüz kurulmadı | Sadece yeni sorun (ACİL) veya düzelme |
+| Saatlik | `hourly` (liste `saatlik.js`) | henüz kurulmadı | Sadece yeni sorun (ACİL / Uyarı) veya düzelme |
+
+**Saatlik kontrol:** her sitede ana sayfa; `saatlik.js` listesinde ürünü olan sitelerde her saat sıradaki upload ürünü
+yüklenir → sepete eklenir → checkout açılır; diğer sitelerde normal bir ürünle Add to cart → sepet → checkout.
+Seviyeler ve mail kuralları `uyari.js` dosyasının başında. `node run.js --mode hourly --plan` bu saatin planını yazar.
 
 Elle çalıştırmak için: Make'teki "(elle)" senaryosu ya da GitHub'da **Actions → Site testleri → Run workflow**.
 `sites` girilirse (tek site denemesi) mail gönderilmez.

@@ -65,6 +65,83 @@ async function deneme(ad, fn) {
     assert.match(t[0], /cart\/add\.js → HTTP 422/);
   });
 
+  // Saatlik test (19 Kasım): liste, ürün sırası ve uyarı seviyeleri
+  const { severity, alertState } = require('./uyari');
+  const SAATLIK = require('./saatlik');
+  const fs = require('fs');
+  await deneme('saatlik.js: her ürün kendi sitesinde testi olan bir akış (pageCheck değil), gangsheet.com yok', () => {
+    const sites = fs.readdirSync(`${__dirname}/sites`).map(f => require(`./sites/${f}`));
+    for (const u of SAATLIK.upload) {
+      const url = new URL(u), site = sites.find(s => new URL(s.base).hostname.replace(/^www\./, '') === url.hostname.replace(/^www\./, ''));
+      assert.ok(site, `site yok: ${u}`);
+      assert.ok(site.domain !== 'gangsheet.com', 'gangsheet saatlik listede olmamalı');
+      const f = site.flows.find(x => x.id === url.pathname.split('/products/')[1]);
+      assert.ok(f && !f.noCart, `testi olan akış yok: ${u}`);
+    }
+    assert.ok(SAATLIK.haric.includes('gangsheet'));
+  });
+  const flow = (steps, extra = {}) => ({ ok: !steps.some(s => !s.ok), steps, title: 'X', id: 'x', ...extra });
+  const ok = n => ({ name: n, ok: true }), bad = (n, error = 'hata') => ({ name: n, ok: false, error });
+  await deneme('Seviye: sepete ekleme / sepet / checkout / ana sayfa → ACİL', () => {
+    for (const n of ['Sepete ekle', 'Save & Add to Cart', 'Sepet doğrulama', 'Checkout', 'Checkout butonu', 'Ana sayfa', 'Sayfa açılıyor', 'Add to cart butonu', 'Baskı dosyası erişilebilir'])
+      assert.equal(severity(flow([bad(n)])), 'acil', n);
+  });
+  await deneme('Seviye: upload aracı (yükleme, builder) sorunlu → Uyarı; test ürünü stokta yok → Uyarı', () => {
+    for (const n of ['Upload', 'Builder açılıyor', "Görseli sheet'e yerleştir"]) assert.equal(severity(flow([ok('Sayfa açılıyor'), bad(n)])), 'uyari', n);
+    assert.equal(severity(flow([bad('Ürün sayfası', 'Test ürünlerinin hiçbiri stokta değil')])), 'uyari');
+    assert.equal(severity(flow([bad('Zaman aşımı (son başarılı adım: Sayfa açılıyor)')])), 'uyari');
+    assert.equal(severity(flow([bad('Zaman aşımı (son başarılı adım: Sepete ekle)')])), 'acil');
+  });
+  await deneme('Seviye: bot koruması / hız sınırı → site hatası değil (engel)', () =>
+    assert.equal(severity(flow([bad('Sepete ekle')], { botBlock: 'ratelimit' })), 'engel'));
+  const tur = (flows, domain = 'a.com') => [{ domain, flows }];
+  const T1 = '2026-11-19T01:00:00Z', T2 = '2026-11-19T02:00:00Z';
+  await deneme('Durum: yeni sorun → mail; sürerse tekrar mail yok; düzelince "Düzeldi"', () => {
+    const f = flow([bad('Checkout')], { id: 'core' });
+    const r1 = alertState(tur([f]), {}, T1);
+    assert.equal(r1.newFailures.length, 1); assert.equal(r1.newFailures[0].level, 'acil');
+    const r2 = alertState(tur([f]), r1.now, T2);
+    assert.equal(r2.newFailures.length, 0); assert.equal(r2.ongoing.length, 1); assert.equal(r2.ongoing[0].since, T1);
+    const r3 = alertState(tur([flow([ok('Checkout')], { id: 'core' })]), r2.now, T2);
+    assert.equal(r3.recovered.length, 1); assert.deepEqual(r3.now, {});
+  });
+  await deneme('Durum: uyarıdan acile yükselince tekrar mail', () => {
+    const r1 = alertState(tur([flow([bad('Upload')])]), {}, T1);
+    const r2 = alertState(tur([flow([bad('Sepete ekle')])]), r1.now, T2);
+    assert.equal(r2.newFailures.length, 1); assert.equal(r2.newFailures[0].level, 'acil');
+  });
+  await deneme('Durum: bot koruması 1-2 saat mail yok, 3. saatte "test edilemiyor", sonra tekrar yok', () => {
+    const f = flow([bad('Sepete ekle')], { botBlock: 'challenge' });
+    let st = {};
+    for (let h = 1; h <= 4; h++) {
+      const r = alertState(tur([f]), st, T1); st = r.now;
+      assert.equal(r.newFailures.length, h === 3 ? 1 : 0, `saat ${h}`);
+    }
+    const r = alertState(tur([flow([ok('Sepete ekle')])]), st, T2);
+    assert.equal(r.recovered.length, 1);
+  });
+  await deneme('Durum: bu saat sırası gelmeyen ürünün sorunu silinmez; eski biçimli kayıt yok sayılır', () => {
+    const st = { 'a.com/y': { level: 'uyari', since: T1, site: 'a.com', flow: 'Y' }, 'a.com/core': { since: T1 } };
+    const r = alertState(tur([flow([ok('Ana sayfa')], { id: 'anasayfa' })]), st, T2);
+    assert.ok(r.now['a.com/y']); assert.ok(!r.now['a.com/core']); assert.equal(r.recovered.length, 0);
+  });
+  await deneme('Durum: ana sayfa 15 sn üstü → Uyarı, normale dönünce Düzeldi', () => {
+    const r1 = alertState(tur([flow([ok('Ana sayfa')], { id: 'anasayfa', homepageMs: 21000 })]), {}, T1);
+    assert.equal(r1.newFailures.length, 1); assert.equal(r1.newFailures[0].level, 'uyari');
+    const r2 = alertState(tur([flow([ok('Ana sayfa')], { id: 'anasayfa', homepageMs: 3000 })]), r1.now, T2);
+    assert.equal(r2.recovered.length, 1);
+  });
+  await deneme('Mail: ACİL konusu ve seviye; sadece uyarı varsa "Uyarı" konusu', () => {
+    const { build } = require('./report');
+    const run = (nf) => ({ mode: 'hourly', startedAt: T1, ms: 1000, sites: [], ok: false, alert: { newFailures: nf, recovered: [], ongoing: [] } });
+    const a = build(run([{ site: 'a.com', flow: 'Ana fonksiyonlar (sepete ekle, checkout)', level: 'acil' }, { site: 'a.com', flow: 'Y (Upload)', level: 'uyari' }]));
+    assert.match(a.subject, /^🚨 ACİL/); assert.equal(a.level, 'acil'); assert.ok(a.sendEmail);
+    const u = build(run([{ site: 'a.com', flow: 'Y (Upload)', level: 'uyari' }]));
+    assert.match(u.subject, /^⚠️ Uyarı/);
+    const n = build(run([]));
+    assert.ok(!n.sendEmail);
+  });
+
   if (CANLI) {
     console.log('\nCanlı denemeler (okuma istekleri, sepete ekleme yok)');
     const { chromium } = require('playwright');

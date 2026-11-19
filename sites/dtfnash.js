@@ -1,6 +1,6 @@
-// DTF Nash – upload ürünleri (7 tanınan uygulama, 5 henüz testi yazılmamış uygulama: sadece sayfa kontrolü).
+// DTF Nash – upload ürünleri (pageCheck: uygulaması henüz testte olmayan ürün, sadece sayfa kontrolü).
 // Uygulamaların test adımları apps.js'de.
-const { uploadStudio, gsUploader, gsStudio, pageCheck, product } = require('../apps');
+const { uploadStudio, gsUploader, gsStudio, builder, cloudlift, pageCheck, product } = require('../apps');
 const BASE = 'https://dtfnash.com';
 const p = (handle, title, app) => product(BASE, handle, title, app);
 const gsStudioBasic = () => gsStudio({ input: '#gsb-i2s-file-input' });
@@ -17,10 +17,10 @@ module.exports = {
     p('glitter-dtf-transfers-builder', "Glitter DTF Transfers Gang Sheet Builder", pageCheck()),
     p('uv-dtf-transfers-by-size', "UV DTF Transfers By Size", gsStudio()),
     p('glitter-dtf-transfers', "Glitter DTF Transfers Gang Sheets", uploadStudio()),
-    p('gang-sheet-builder-1', "DTF Gang Sheet Builder", pageCheck()),
+    p('gang-sheet-builder-1', "DTF Gang Sheet Builder", builder()),
     p('glow-dark-dtf-transfers', "Glow In The Dark DTF - Transfers By Size", gsStudio()),
     p('custom-uv-dtf-transfer', "Custom UV DTF Gang Sheets - Upload UV Transfer", uploadStudio()),
-    p('uv-dtf-gang-sheet', "UV DTF Gang Sheet Builder", pageCheck()),
+    p('uv-dtf-gang-sheet', "UV DTF Gang Sheet Builder", builder()),
     p('glow-in-the-dark-dtf-gang-sheets', "Glow In The Dark - DTF Gang Sheets", uploadStudio()),
     p('glitter-dtf-transfers-by-size', "Glitter DTF Transfers By Size", pageCheck()),
     p('glow-in-the-dark-dtf', "Glow In The Dark DTF Gang Sheet Builder", pageCheck()),

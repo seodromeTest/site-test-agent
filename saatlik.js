@@ -1,0 +1,51 @@
+// Saatlik kontrol listesi (kullanıcının verdiği liste, 19 Kasım 2026).
+// - upload: saatlik testte upload'u denenecek ürünler. Her saat her siteden SIRADAKİ bir ürün test edilir
+//   (ör. 8 ürünü olan sitede her ürün 8 saatte bir). Ürün sitenin sites/<site>.js dosyasında bir akış olarak
+//   tanımlı olmalı (aynı handle). Adresteki ?variant=… olduğu gibi kullanılır.
+// - Bu listede ürünü olmayan siteler: saatlik testte ana sayfa + normal bir ürünle Add to cart → sepet → checkout.
+// - haric: saatlik testte hiç olmayan siteler.
+module.exports = {
+  haric: ['gangsheet'],
+  upload: [
+    'https://www.dtftransferohio.com/products/premium-dtf-gang-sheets',
+    'https://www.dtftransferohio.com/products/gang-sheet-builder-dtf-build',
+    'https://www.dtftransferohio.com/products/uv-dtf-gang-sheets-ohio',
+    'https://www.dtftransferohio.com/products/uv-dtf-gang-sheet-builder',
+    'https://dtfprintdepot.com/products/gang-sheet-builder-1',
+    'https://dtfprintdepot.com/products/uv-dtf-gang-sheet',
+    'https://dtfnash.com/products/gang-sheet-builder-1',
+    'https://dtfnash.com/products/uv-dtf-gang-sheet',
+    'https://legendtransfers.com/products/dtf-gang-sheet',
+    'https://legendtransfers.com/products/online-dtf-gang-sheets-builder?variant=49424053076241',
+    'https://legendtransfers.com/products/glitter-dtf-transfer-custom-gang-sheet-upload',
+    'https://legendtransfers.com/products/online-glitter-gang-sheet-builder?variant=51528231682321',
+    'https://legendtransfers.com/products/glow-in-the-dark-dtf-gang-sheet',
+    'https://legendtransfers.com/products/online-glow-dark-gang-sheet?variant=51528242954513',
+    'https://legendtransfers.com/products/uv-dtf-gang-sheet-2',
+    'https://legendtransfers.com/products/online-uv-gang-sheet-builder?variant=49938631295249',
+    'https://www.fastdtftransfer.com/products/custom-dtf-transfer',
+    'https://www.fastdtftransfer.com/products/free-dtf-gang-sheet-builder',
+    'https://www.fastdtftransfer.com/products/uv-dtf-gang-sheets',
+    'https://www.fastdtftransfer.com/products/uv-dtf-gang-sheets-1',
+    'https://www.fastdtftransfer.com/products/glitter-dtf-transfer-gang-sheet-builder',
+    'https://www.fastdtftransfer.com/products/glitter-dtf-gang-sheets',
+    'https://www.fastdtftransfer.com/products/dtf-gang-sheet-builder',
+    'https://www.fastdtftransfer.com/products/glow-in-the-dark-dtf-gang-sheets',
+    'https://www.dtftransferarizona.com/products/dtf-gang-sheet?variant=48201499967540',
+    'https://www.dtftransferarizona.com/products/dtf-gang-sheet-builder?variant=46401154514996',
+    'https://www.dtftransferarizona.com/products/uv-dtf-gang-sheet-1?variant=46401192624180',
+    'https://www.dtftransferarizona.com/products/uv-dtf-gang-sheet?variant=46401164607540',
+    'https://customprintaz.com/products/dtf-gang-sheet-builder',
+    'https://customprintaz.com/products/uv-dtf-gang-sheet',
+    'https://eagledtfprint.com/products/dtf-gang-sheet-upload',
+    'https://eagledtfprint.com/products/build-dtf-gang-sheet',
+    'https://eagledtfprint.com/products/uv-dtf-gang-sheet',
+    'https://eagledtfprint.com/products/uv-gang-sheet-builder',
+    'https://eagledtfprint.com/products/glitter-dtf-gang-sheets',
+    'https://eagledtfprint.com/products/glitter-dtf-gang-sheet-builder',
+    'https://eagledtfprint.com/products/upload-your-glow-in-the-dark-dtf-gang-sheet',
+    'https://eagledtfprint.com/products/glow-dark-dtf-gang-sheet',
+    'https://www.chilitransfers.com/products/dtf-gang-sheet-builder',
+    'https://www.chilitransfers.com/products/uv-dtf-gang-sheet-builder',
+  ],
+};

@@ -40,12 +40,13 @@ Make senaryoları (team 1840541, saat dilimi Berlin):
   testleri atlanır, rapor yine gider. Bot koruması (`botBlock: 'challenge'`) ve Shopify hız sınırı (`'ratelimit'`, 429)
   "test edilemedi" sayılır, site hatası sayılmaz.
 - `apps.js` upload uygulamaları: Upload Studio, GS uploader, GS Studio (i2s, PressCheck), Build a Gang Sheet
-  (dripapps), Everyday upload aracı (`ssMatrix`, beden/adet tablosu + baskı alanları, Avada en az adet kuralı),
+  (dripapps), Cloudlift upload (filepond), Everyday upload aracı (`ssMatrix`, beden/adet tablosu + baskı alanları, Avada en az adet kuralı),
   Everyday ürün taraması (`ssLayoutScan`), `pageCheck` (uygulaması test edilmeyen ürün: sadece sayfa açılıyor mu).
 - `genel.js` genel kontrol: masaüstü menü hover, mobil hamburger, banner/slider, tüm ana sayfa linkleri (tek tek),
   boş koleksiyon (yönlendirmeyi takip eder), footer, sosyal medya, diğer siteler, chat, mobil taşma.
 - `detay.js` her kontrol için rapor satırı (mail ve Excel aynı satırları kullanır). `report.js` mail HTML.
-  `excel.js` Excel. `lib.js` tarayıcı oturumu, pop-up gizleme, oturum kaydı, teşhis.
+  `excel.js` Excel. `lib.js` tarayıcı oturumu, pop-up gizleme, oturum kaydı, teşhis. `saatlik.js` saatlik liste,
+  `uyari.js` saatlik uyarı seviyesi ve durumu.
 - `sites/*.js` 16 site (fastdtf* önce çalışır). `fixtures/` test görselleri. `matrix.js` dosya türü matrisi
   (ayrı araç, gece testinde yok; hâlâ paralel çalışıyor, sıralıya çevrilmeli).
 - Yerel çalıştırma: `node run.js --mode full --sites <site> --only <akış-id,...>` (argümanlar boşlukla). Bu ortamda
@@ -62,18 +63,30 @@ DTF Nash "Custom DTF Transfers By Size": GS Studio sepete ekleyemiyor, `POST /ca
 (/collections/rush-orders). Kullanıcı ekibe iletti. 16 Kasım testinde hâlâ: DTF Nash, Everyday, Gangsheet.
 Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış alarmdı, PR #18 ile düzeltildi.
 
-## Sıradaki iş: saatlik kontrol (onaylanan plan)
-- Her saat, her sitede: ana sayfa (süre ölçümü) + core akış + **sırayla değişen tek bir upload ürünü** (her saat
-  bir sonraki ürün; tüm ürünler gün içinde birkaç kez test edilir, siteye yük saatte ~1 yükleme).
-- Saatlik testte olmayacak: linkler, menüler, footer, sosyal medya, mobil, Firefox/Safari, Everyday taraması.
-- Hata olursa 2 dk bekleyip tekrar dene; iki deneme de başarısızsa "ACİL" mail, düzelince "Düzeldi"; sorun sürdükçe
-  her saat tekrar mail yok (durum `results/state.json`, Actions cache ile taşınıyor).
-- Make kullanımı: saatlik test webhook'u **sadece mail gidecekse** göndermeli (şu an her turda gönderiyor).
-  Saatlik başlatma senaryosu ayda ~730 Make işlemi; kullanıcı Make planının sınırını kontrol edecek.
+## Saatlik kontrol (19 Kasım: kod hazır, gece denemesi ve Make senaryosu bekliyor)
+- Liste `saatlik.js` (kullanıcının verdiği 40 URL, 9 site). gangsheet.com saatlik testte yok (`haric`).
+- Listede ürünü olan sitede her saat: ana sayfa (süre) + **sıradaki tek upload ürünü** (saat no % ürün sayısı):
+  yükle → Add to cart → sepet doğrulama + baskı dosyası linki → sepet sayfası → **checkout** (ödeme sayfası açılıyor,
+  sipariş özeti görünüyor; bilgi girilmez). Builder ürünlerinde sonuna kadar (Save & Add to Cart) gidilir.
+- Listede ürünü olmayan 6 sitede (alpha, dtfbank, dtfprinthouse, eagledtfsupply, fastdtfsupply, everyday): ana sayfa →
+  normal ürün → Add to cart → sepet → checkout (arama yok).
+- Saatlik testte olmayan: arama, linkler, menüler, footer, sosyal medya, mobil, Firefox/Safari, Everyday taraması.
+- Hata → 2 dk sonra tekrar; ikisi de başarısızsa seviye (`uyari.js`): **ACİL** (ana sayfa/ürün sayfası, Add to cart,
+  sepet, baskı dosyası linki, checkout), **Uyarı** (upload aracı: yükleme/builder; ana sayfa > 15 sn), bot koruması/429
+  site hatası değil, 3 saat üst üste test edilemezse "Test edilemiyor". Sorun sürdükçe mail yok; düzelince "Düzeldi".
+  Sorunlu ürün düzelene kadar her saat ayrıca denenir. Durum `results/state.json` (Actions cache); genel test dokunmaz.
+- Make'e (webhook) sadece mail gidecekse gönderilir; payload'da `alertLevel` (acil/uyari/engel/duzeldi).
+- Süre: 45 dk dolunca kalan siteler atlanır; iş 55 dk'da kesilir; saatlik turda sadece Chrome kurulur.
+- `node run.js --mode hourly --plan` siteye bağlanmadan bu saatin planını yazar.
+- Builder ürünlerinin hepsi aynı uygulama (Build a Gang Sheet, dripapps; buton `#gs-builder-btn`, metni mağazaya göre
+  değişir). Ohio ve Arizona hazır sheet ürünleri **Cloudlift upload** (filepond, `_cl-upload[]`): yeni yazıldı, sepetteki
+  özellik adı bilinmiyor (`fileProp: '*'`, değeri link olan özellik) → **gece denemesinde doğrulanacak**.
+- Bu değişiklikle listedeki builder ve Cloudlift ürünleri haftalık genel testte de artık gerçekten test ediliyor
+  (önce pageCheck). Legend'in eski adresi `dtf-transfer-custom-gang-sheet` açılmıyor → `glitter-dtf-transfer-custom-gang-sheet-upload`.
+- Sıradaki: kullanıcı onayıyla gece tek tur deneme (`sites` girilerek: mail gitmez, durum yazılmaz), sonra Make'te
+  saatlik senaryo (10116955'in kopyası, `inputs.mode=hourly`). Make planı sınırı (ayda ~730 başlatma) ve upload
+  uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.
-- Upload uygulamalarının yükleme/depolama sınırları kullanıcıya soruldu (saatte ~16 yükleme ≈ günde ~380 dosya).
-- Gündüz deneme yok: kod hazırlanır, gece tek tur denenir, sonra Make'te saatlik senaryo kurulur
-  (10116955'in kopyası, `inputs.mode=hourly`).
 
 ## Yanlış alarmları azaltma (16 Kasım, yapıldı)
 - "Sorun" sadece gerçek hatalı cevap (404/410, 5xx, bağlantı yok, boş koleksiyon, reddedilen sepet isteği). Hız sınırı (429)

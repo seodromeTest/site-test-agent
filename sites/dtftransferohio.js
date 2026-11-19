@@ -1,6 +1,6 @@
-// DTF Transfer Ohio – upload ürünleri (2 tanınan uygulama, 4 henüz testi yazılmamış uygulama: sadece sayfa kontrolü).
+// DTF Transfer Ohio – upload ürünleri (pageCheck: uygulaması henüz testte olmayan ürün, sadece sayfa kontrolü).
 // Uygulamaların test adımları apps.js'de.
-const { uploadStudio, gsUploader, gsStudio, pageCheck, product } = require('../apps');
+const { uploadStudio, gsUploader, gsStudio, builder, cloudlift, pageCheck, product } = require('../apps');
 const BASE = 'https://www.dtftransferohio.com';
 const p = (handle, title, app) => product(BASE, handle, title, app);
 const gsStudioBasic = () => gsStudio({ input: '#gsb-i2s-file-input' });
@@ -13,10 +13,10 @@ module.exports = {
   core: { search: 'dtf' },
   flows: [
     p('dtf-transfers-by-size', "DTF Transfers By Size", gsStudio()),
-    p('gang-sheet-builder-dtf-build', "Build Your DTF Gang Sheet", pageCheck()),
+    p('gang-sheet-builder-dtf-build', "Build Your DTF Gang Sheet", builder()),
     p('uv-dtf-transfers-by-size', "UV DTF Transfers By Size", gsStudio()),
-    p('premium-dtf-gang-sheets', "DTF Gang Sheets", pageCheck()),
-    p('uv-dtf-gang-sheets-ohio', "UV DTF Gang Sheets", pageCheck()),
-    p('uv-dtf-gang-sheet-builder', "Build Your UV DTF Gang Sheet", pageCheck()),
+    p('premium-dtf-gang-sheets', "DTF Gang Sheets", cloudlift()),
+    p('uv-dtf-gang-sheets-ohio', "UV DTF Gang Sheets", cloudlift()),
+    p('uv-dtf-gang-sheet-builder', "Build Your UV DTF Gang Sheet", builder()),
   ],
 };
