@@ -18,7 +18,7 @@ function coreText(f, s) {
     case 'Ürün sayfası': return ['Normal bir ürünün sayfası açılıyor mu', s.ok ? `Açıldı${f.testProduct ? `: ${f.testProduct}` : ''}` : null];
     case 'Add to cart butonu': return ['Add to cart butonu ürünü sepete ekliyor mu', s.ok ? `Sepete eklendi${f.cart ? ` ($${f.cart.price})` : ''}` : null];
     case 'Sepet sayfası': return ['Sepet sayfası açılıyor, ürün görünüyor mu', s.ok ? 'Ürün sepette görünüyor' : null];
-    case 'Checkout butonu': return ['Checkout butonu ödeme sayfasına götürüyor mu', s.ok ? (f.checkout || 'Ödeme sayfası açıldı') + ' (sipariş verilmedi)' : null];
+    case 'Checkout butonu': return ['Checkout: ödeme sayfası açılıyor, sipariş özeti görünüyor mu', s.ok ? (f.checkout || 'Ödeme sayfası açıldı') + ' (sipariş verilmedi)' : null];
     default: return [s.name, null];
   }
 }
@@ -37,14 +37,15 @@ function uploadText(f, s) {
     case 'Sepet doğrulama': return ['Ürün yüklenen dosyayla birlikte sepete düştü mü', s.ok ? `Sepette${f.cart ? `: ${[f.cart.variant, '$' + f.cart.price].filter(Boolean).join(' · ')}` : ''}` : null];
     case 'Baskı dosyası erişilebilir': return ['Sepetteki baskı dosyası linki açılıyor mu', s.ok ? 'Açılıyor' : null];
     case 'Sepet sayfası': return ['Sepet sayfasında ürün görünüyor mu', s.ok ? 'Görünüyor' : null];
+    case 'Checkout': return ['Checkout: ödeme sayfası açılıyor, sipariş özeti görünüyor mu', s.ok ? (f.checkout || 'Ödeme sayfası açıldı') + ' (sipariş verilmedi)' : null];
     case 'Ürün sayfası': return ['Ürün başlığı ve sayfa içeriği görünüyor mu', s.ok ? 'Görünüyor' : null];
     default: return [s.name, null];
   }
 }
 
 function flowRows(f) {
-  const isCore = f.id === 'core';
-  const bolum = isCore ? 'Ana fonksiyonlar' : f.title;
+  const isCore = f.id === 'core' || f.id === 'anasayfa';
+  const bolum = f.id === 'anasayfa' ? 'Ana sayfa' : isCore ? 'Ana fonksiyonlar' : f.title;
   // Test sunucusu bot korumasına takıldıysa: site hatası sayma, "test edilemedi" olarak göster
   const BOT = f.botBlock === 'ratelimit'
     ? 'Test edilemedi: Shopify hız sınırına takıldı (çok fazla istek, HTTP 429) – test yükünden kaynaklı, site hatası değil; elle kontrol önerilir'
@@ -61,7 +62,7 @@ function flowRows(f) {
     rows.splice(i + 1, 0, { bolum, kontrol: 'Hata anındaki konsol ve ağ kayıtları', adres: '', sonuc: failed.tani.join(' | '), durum: 'bilgi' });
   }
   // Hata sonrası yapılamayan adımlar da görünsün
-  if (isCore && !f.ok) for (const name of CORE_STEPS.slice(CORE_STEPS.indexOf(f.steps[f.steps.length - 1]?.name) + 1))
+  if (f.id === 'core' && !f.ok) for (const name of CORE_STEPS.slice(CORE_STEPS.indexOf(f.steps[f.steps.length - 1]?.name) + 1).filter(n => !(f.noSearch && n === 'Arama')))
     rows.push({ bolum, kontrol: coreText(f, { name })[0], adres: '', sonuc: 'Yapılamadı (önceki adımda sorun var)', durum: 'yapilmadi' });
   if (!f.ok && !isCore) rows.push({ bolum, kontrol: 'Sonraki adımlar', adres: '', sonuc: 'Yapılamadı (önceki adımda sorun var)', durum: 'yapilmadi' });
   if (f.retried && f.ok) rows.push({ bolum, kontrol: 'Not', adres: '', sonuc: `İlk denemede takıldı (${f.firstAttempt?.step || ''}${f.firstAttempt?.botBlock === 'ratelimit' ? ', hız sınırı' : f.firstAttempt?.botBlock ? ', bot koruması' : ''}), ikinci denemede geçti`, durum: 'bilgi' });

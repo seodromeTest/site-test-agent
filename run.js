@@ -1,7 +1,10 @@
 // Site test çalıştırıcı – birden fazla siteyi test eder, tek rapor üretir.
-// Kullanım: node run.js [--mode hourly|full] [--sites fastdtftransfer,fastdtfsupply] [--only <akış-id>] [--fail-demo]
-//   hourly: ana fonksiyonlar + upload akışları; sadece durum değişince mail (yeni sorun / düzeldi)
-//   full:   hourly + ana sayfadaki tüm site içi linkler; her zaman genel rapor maili
+// Kullanım: node run.js [--mode hourly|full] [--sites fastdtftransfer,fastdtfsupply] [--only <akış-id>] [--fail-demo] [--plan]
+//   hourly: saatlik kontrol (liste saatlik.js'de). Upload listesinde ürünü olan sitede: ana sayfa + sıradaki upload
+//           ürünü (yükle → Add to cart → sepet → checkout). Diğer sitelerde: ana sayfa + normal ürünle Add to cart →
+//           sepet → checkout. Mail sadece durum değişince (ACİL / Uyarı / Düzeldi); Make'e de sadece o zaman gönderilir.
+//   full:   tüm upload akışları + arama + genel kontroller + Firefox/Safari; her zaman genel rapor maili
+//   --plan: hiçbir siteye bağlanmadan bu saat neyin test edileceğini yazar
 // WEBHOOK_URL tanımlıysa sonuç Make webhook'una POST edilir.
 const fs = require('fs');
 const path = require('path');
@@ -10,10 +13,16 @@ const { chromium, firefox, webkit } = require('playwright');
 const args = process.argv.slice(2);
 const arg = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : def; };
 const MODE = arg('mode', 'hourly');
+const HOURLY = MODE === 'hourly';
+const SAATLIK = require('./saatlik');
 const SITES = (arg('sites') || fs.readdirSync(path.join(__dirname, 'sites')).filter(f => f.endsWith('.js')).sort()
-  .sort((a, b) => (b.startsWith('fastdtf') - a.startsWith('fastdtf'))).map(f => f.replace(/\.js$/, '')).join(',')).split(',');
+  .sort((a, b) => (b.startsWith('fastdtf') - a.startsWith('fastdtf'))).map(f => f.replace(/\.js$/, ''))
+  .filter(n => !HOURLY || !SAATLIK.haric.includes(n)).join(',')).split(',');
 const ONLY = arg('only');
 const FAIL_DEMO = args.includes('--fail-demo');
+const PLAN = args.includes('--plan');
+// Saatlik sıra: her saat bir sonraki upload ürünü (saat numarası ürün sayısına bölümünden kalan)
+const HOUR = Math.floor(Date.now() / 3600000);
 const OUT = path.join(__dirname, 'results');
 const STATE = path.join(OUT, 'state.json');
 const DEBUG = !!process.env.DEBUG;
@@ -31,18 +40,50 @@ const nextFixture = group => {
 };
 
 const { withTimeout, shot, getCart, escRe, newPage, gotoOk, diagnose, botCheck, botFromLog } = require('./lib');
+const { alertState } = require('./uyari');
 
-// Ana fonksiyonlar: ana sayfa → arama → ürün + sepete ekle → sepet → checkout butonu
-function coreFlow(site) {
+// Checkout: sepet sayfasında Checkout'a bas, Shopify ödeme sayfasının gerçekten açıldığını doğrula
+// (sayfada sipariş özeti / ara toplam görünmeli). Hiçbir bilgi girilmez, sipariş verilmez.
+async function checkout(page, result) {
+  // Bazı mağazalarda checkout öncesi "Terms and Conditions" onay kutusu zorunlu
+  const box = page.locator('label:has-text("agree") input[type=checkbox], input[type=checkbox][id*=agree i], input[type=checkbox][name*=agree i], input[type=checkbox][id*=terms i], input[type=checkbox][name*=terms i], input[type=checkbox][class*=terms i], input[type=checkbox][class*=condition i], terms-conditions input[type=checkbox], [class*=term] input[type=checkbox]').filter({ visible: true }).first();
+  if (await box.count()) await box.check({ force: true }).catch(() => {});
+  const btn = page.locator('[name=checkout], button:has-text("Checkout"), a:has-text("Checkout"), button:has-text("Check out")').filter({ visible: true }).first();
+  // Sıralı: önce tıkla, sonra yönlendirmeyi bekle (waitForURL sayfa zaten oradaysa hemen döner)
+  await btn.click();
+  await page.waitForURL(/checkouts|authentication|account\./, { timeout: 45000 });
+  if (!page.url().includes('/checkouts/')) { result.checkout = 'Müşteri giriş sayfası açıldı'; return; }
+  const summary = page.getByText(/^subtotal|order summary/i).filter({ visible: true }).first();
+  await summary.waitFor({ timeout: 30000 }).catch(() => { throw new Error('Ödeme sayfası açıldı ama sipariş özeti (ürün ve tutar) görünmedi'); });
+  result.checkout = 'Ödeme sayfası açıldı, sipariş özeti görünüyor';
+}
+
+// Sadece ana sayfa (saatlik testte upload ürünü olan sitelerde): açılıyor mu, ne kadar sürede
+function homeFlow(site) {
   return {
-    id: 'core', title: 'Ana fonksiyonlar (arama, sepete ekle, checkout)', url: site.base + '/',
+    id: 'anasayfa', title: 'Ana sayfa', url: site.base + '/', direct: true,
     async run(page, step, file, notes, result) {
       await step('Ana sayfa', async () => {
         const s = Date.now();
         await gotoOk(page, site.base + '/', { waitUntil: 'load' });
         result.homepageMs = Date.now() - s;
       });
-      await step('Arama', async () => {
+    },
+  };
+}
+
+// Ana fonksiyonlar: ana sayfa → arama → ürün + sepete ekle → sepet → checkout
+// search: false → arama adımı yok (saatlik test)
+function coreFlow(site, { search = true } = {}) {
+  return {
+    id: 'core', title: search ? 'Ana fonksiyonlar (arama, sepete ekle, checkout)' : 'Ana fonksiyonlar (sepete ekle, checkout)', url: site.base + '/', direct: true, noSearch: !search,
+    async run(page, step, file, notes, result) {
+      await step('Ana sayfa', async () => {
+        const s = Date.now();
+        await gotoOk(page, site.base + '/', { waitUntil: 'load' });
+        result.homepageMs = Date.now() - s;
+      });
+      if (search) await step('Arama', async () => {
         result.search = site.core.search;
         await gotoOk(page, `${site.base}/search?q=${encodeURIComponent(site.core.search)}`);
         await page.locator('a[href*="/products/"]').filter({ visible: true }).first().waitFor({ timeout: 20000 });
@@ -107,16 +148,7 @@ function coreFlow(site) {
         await gotoOk(page, `${site.base}/cart`);
         await page.getByText(new RegExp(escRe(product.title.slice(0, 25)), 'i')).filter({ visible: true }).first().waitFor({ timeout: 20000 });
       });
-      await step('Checkout butonu', async () => {
-        // Bazı mağazalarda checkout öncesi "Terms and Conditions" onay kutusu zorunlu
-        const box = page.locator('label:has-text("agree") input[type=checkbox], input[type=checkbox][id*=agree i], input[type=checkbox][name*=agree i], input[type=checkbox][id*=terms i], input[type=checkbox][name*=terms i], input[type=checkbox][class*=terms i], input[type=checkbox][class*=condition i], terms-conditions input[type=checkbox], [class*=term] input[type=checkbox]').filter({ visible: true }).first();
-        if (await box.count()) await box.check({ force: true }).catch(() => {});
-        const btn = page.locator('[name=checkout], button:has-text("Checkout"), a:has-text("Checkout"), button:has-text("Check out")').filter({ visible: true }).first();
-        // Sıralı: önce tıkla, sonra yönlendirmeyi bekle (waitForURL sayfa zaten oradaysa hemen döner)
-        await btn.click();
-        await page.waitForURL(/checkouts|authentication|account\./, { timeout: 45000 });
-        result.checkout = page.url().includes('/checkouts/') ? 'Ödeme sayfası açıldı' : 'Müşteri giriş sayfası açıldı';
-      });
+      await step('Checkout butonu', () => checkout(page, result));
     },
   };
 }
@@ -124,7 +156,7 @@ function coreFlow(site) {
 async function runFlow(browser, site, flow, demoBreak) {
   const { ctx, page, jsErrors, log } = await newPage(browser);
   const file = nextFixture(flow.fixture);
-  const result = { id: flow.id, title: flow.title, app: flow.appName, url: flow.url, ok: true, steps: [], notes: [] };
+  const result = { id: flow.id, title: flow.title, app: flow.appName, url: flow.url, ok: true, steps: [], notes: [], ...(flow.noSearch ? { noSearch: true } : {}) };
   const t0 = Date.now();
   // Adımlar kesinlikle sıralı: bir adım (ve sayfanın o adımda başlattığı istekler) bitmeden sonraki başlamaz.
   // Adım sırasında kaydedilen konsol/ağ olayları o adıma yazılır; hata teşhisi bunlarla yapılır.
@@ -169,7 +201,7 @@ async function runFlow(browser, site, flow, demoBreak) {
     result.file = path.basename(file);
     await flow.run(page, step, file, result.notes, { log });
     if (flow.noCart) return; // sadece sayfa kontrolü
-    let item;
+    let item, fileKey;
     await step('Sepet doğrulama', async () => {
       const deadline = Date.now() + 25000;
       while (Date.now() < deadline) {
@@ -179,14 +211,19 @@ async function runFlow(browser, site, flow, demoBreak) {
         await page.waitForTimeout(1500);
       }
       if (!item) throw new Error(`Ürün sepete düşmedi (${flow.expectProduct})`);
-      if (!item.properties?.[flow.fileProp]) throw new Error(`Sepette yüklenen dosya bilgisi yok (${flow.fileProp})`);
+      // fileProp '*': özellik adı mağazaya göre değişiyor, değerinde dosya linki olan özellik aranır (Cloudlift)
+      fileKey = flow.fileProp === '*' ? Object.keys(item.properties || {}).find(k => /https?:\/\//.test(String(item.properties[k]))) : flow.fileProp;
+      if (!fileKey || !item.properties?.[fileKey]) throw new Error(`Sepette yüklenen dosya bilgisi yok (${flow.fileProp === '*' ? 'dosya linki olan özellik' : flow.fileProp})`);
       // Birden fazla baskı alanına yüklendiyse hepsi sepette olmalı
       const missing = (flow.extraProps || []).filter(k => !item.properties?.[k]);
       if (missing.length) throw new Error(`Sepette bazı baskı alanlarının dosyası yok: ${missing.join(', ')}`);
       result.cart = { variant: item.variant_title, price: (item.final_line_price / 100).toFixed(2) };
     });
     await step('Baskı dosyası erişilebilir', async () => {
-      const res = await fetch(item.properties[flow.fileProp], { redirect: 'follow', signal: AbortSignal.timeout(30000) });
+      // Değer bazen linkin kendisi, bazen linki içeren bir metin: ilk linki al
+      const fileUrl = String(item.properties[fileKey]).match(/https?:\/\/[^\s"'<>,]+/)?.[0];
+      if (!fileUrl) throw new Error(`Sepetteki dosya bilgisinde link yok (${fileKey})`);
+      const res = await fetch(fileUrl, { redirect: 'follow', signal: AbortSignal.timeout(30000) });
       res.body?.cancel().catch(() => {});
       if (res.status >= 400) throw new Error(`Dosya linki HTTP ${res.status}`);
     });
@@ -203,10 +240,12 @@ async function runFlow(browser, site, flow, demoBreak) {
       const name = new RegExp(escRe(flow.expectProduct).replace(/\s+/g, '\\s+'), 'i');
       await page.getByText(name).filter({ visible: true }).first().waitFor({ timeout: 20000 });
     });
+    // Saatlik testte upload ürünüyle checkout'a kadar gidilir (sipariş verilmez)
+    if (HOURLY) await step('Checkout', () => checkout(page, result));
   };
   try {
     // Hiçbir akış 4 dakikadan uzun sürmesin
-    await withTimeout(flow.id === 'core' ? flow.run(page, step, file, result.notes, result) : uploadBody(), flow.timeoutMs || 240000, 'Akış');
+    await withTimeout(flow.direct ? flow.run(page, step, file, result.notes, result) : uploadBody(), flow.timeoutMs || (HOURLY && !flow.direct ? 300000 : 240000), 'Akış');
   } catch (e) {
     result.ok = false;
     if (!result.steps.some(s => !s.ok)) {
@@ -270,18 +309,42 @@ const PACE = MODE === 'full' && !process.env.NO_PACE;
 // Süre güvenliği: GitHub işi 355 dk'da keser ve o zaman mail hiç gitmez. 300 dk dolunca genel kontrol ve
 // tarayıcı testleri atlanır, rapor yine gönderilir (atlananlar raporda "süre yetmedi" olarak görünür).
 const RUN_START = Date.now();
-const BUDGET_MS = +(process.env.BUDGET_MIN || 300) * 60000;
+// Saatlik test bir sonraki saat başlamadan bitmeli: 45 dk dolunca kalan siteler atlanır
+const BUDGET_MS = +(process.env.BUDGET_MIN || (HOURLY ? 45 : 300)) * 60000;
 const overBudget = () => Date.now() - RUN_START > BUDGET_MS;
 const SKIP_ROW = (bolum, adres) => ({ bolum, kontrol: 'Kontrol', adres, sonuc: 'Yapılamadı: testin toplam süre sınırı doldu (rapor gönderilebilsin diye atlandı)', durum: 'yapilmadi' });
 const rest = (min, max) => PACE ? new Promise(r => setTimeout(r, min * 1000 + Math.random() * (max - min) * 1000)) : Promise.resolve();
-const retryWait = r => PACE ? (r.botBlock ? 120 : 45) : (r.botBlock ? 60 : 0);
+// Saatlik testte kısa aralar (siteye yük az: sitede saatte 1 sepete ekleme)
+const hourlyRest = (min, max) => HOURLY && !process.env.NO_PACE ? new Promise(r => setTimeout(r, min * 1000 + Math.random() * (max - min) * 1000)) : Promise.resolve();
+// Saatlik testte başarısız akış 2 dk sonra tekrar denenir (geçici aksaklık ACİL mail sayılmasın)
+const retryWait = r => HOURLY && !process.env.NO_PACE ? 120 : PACE ? (r.botBlock ? 120 : 45) : (r.botBlock ? 60 : 0);
 
-async function testSite(browser, site, isFirstSite) {
+// Saatlik testte bu sitede test edilecek akışlar (saatlik.js). prev: önceki saatlerin uyarı durumu.
+function hourlyFlows(site, prev = {}) {
+  const host = new URL(site.base).hostname.replace(/^www\./, '');
+  const list = SAATLIK.upload.filter(u => new URL(u).hostname.replace(/^www\./, '') === host).map(u => {
+    const id = new URL(u).pathname.split('/products/')[1].replace(/\/$/, '');
+    const flow = site.flows.find(f => f.id === id);
+    if (!flow) throw new Error(`saatlik.js: ${site.domain} sitesinde "${id}" ürünü sites/ dosyasında tanımlı değil`);
+    if (flow.noCart) throw new Error(`saatlik.js: ${site.domain} "${id}" ürününün uygulaması henüz testte değil (pageCheck)`);
+    return { ...flow, url: u }; // adres saatlik listedeki gibi (varyantlı olabilir)
+  });
+  if (!list.length) return [coreFlow(site, { search: false })];
+  const pick = [list[HOUR % list.length]];
+  // Sorunu olan (uyarı maili gitmiş) ürünler düzelene kadar her saat ayrıca denenir: "Düzeldi" maili geç kalmasın
+  for (const f of list) {
+    const st = prev[`${site.domain}/${f.id}`];
+    if (pick.length < 3 && !pick.includes(f) && st && st.level !== 'engel') pick.push(f);
+  }
+  return [homeFlow(site), ...pick];
+}
+
+async function testSite(browser, site, isFirstSite, prev) {
   const flows = [];
-  const all = [coreFlow(site), ...site.flows].filter(f => !ONLY || ONLY.split(',').includes(f.id));
+  const all = (HOURLY ? hourlyFlows(site, prev) : [coreFlow(site), ...site.flows]).filter(f => !ONLY || ONLY.split(',').includes(f.id));
   for (const [k, flow] of all.entries()) {
     // Çok upload ürünü olan ve hız sınırına takılan sitelerde (site dosyasında slowPace) daha uzun ara
-    if (k > 0) await (flow.noCart ? rest(3, 6) : site.slowPace ? rest(45, 60) : rest(20, 30));
+    if (k > 0) await (HOURLY ? hourlyRest(10, 20) : flow.noCart ? rest(3, 6) : site.slowPace ? rest(45, 60) : rest(20, 30));
     const demoBreak = FAIL_DEMO && isFirstSite && flow === all.find(f => f.id !== 'core');
     let r = await runFlow(browser, site, flow, demoBreak);
     // Geçici bir aksaklığı hata saymamak için başarısız akışı bir kez tekrar dene
@@ -321,11 +384,30 @@ async function testSite(browser, site, isFirstSite) {
 (async () => {
   const startedAt = new Date().toISOString();
   const t0 = Date.now();
+  // Önceki saatlerin uyarı durumu (saatlik test): hangi kontrol şu an sorunlu, ne zamandan beri, mail gitti mi
+  let prev = {};
+  try { prev = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) {}
+
+  if (PLAN) {
+    for (const name of SITES) {
+      const site = require(`./sites/${name}`);
+      const fl = HOURLY ? hourlyFlows(site, prev) : [coreFlow(site), ...site.flows];
+      console.log(`${site.domain}: ${fl.map(f => f.direct ? f.title : `${f.title} → ${f.url}`).join(' | ')}`);
+    }
+    return;
+  }
+
   const browser = await chromium.launch();
   const sites = [];
   for (const [i, name] of SITES.entries()) {
-    if (i > 0) await rest(60, 60);
-    sites.push(await testSite(browser, require(`./sites/${name}`), i === 0));
+    const site = require(`./sites/${name}`);
+    if (HOURLY && overBudget()) {
+      console.log(`– ${site.domain}: saatlik süre sınırı doldu, atlandı`);
+      sites.push({ name: site.name, domain: site.domain, base: site.base, flows: [], skipped: true, ok: true });
+      continue;
+    }
+    if (i > 0) await (HOURLY ? hourlyRest(10, 15) : rest(60, 60));
+    sites.push(await testSite(browser, site, i === 0, prev));
   }
   await browser.close();
 
@@ -364,21 +446,9 @@ async function testSite(browser, site, isFirstSite) {
     })();
   }
 
-  // Önceki duruma göre yeni sorunlar ve düzelenler
-  let prev = {};
-  try { prev = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) {}
-  const now = {};
-  const newFailures = [], recovered = [], ongoing = [];
-  for (const s of sites) for (const f of s.flows) {
-    const key = `${s.domain}/${f.id}`;
-    if (!f.ok) {
-      now[key] = { since: prev[key]?.since || startedAt };
-      (prev[key] ? ongoing : newFailures).push({ site: s.domain, flow: f.title, since: now[key].since });
-    } else if (prev[key]) {
-      recovered.push({ site: s.domain, flow: f.title, since: prev[key].since });
-    }
-  }
-  if (!FAIL_DEMO && !ONLY) fs.writeFileSync(STATE, JSON.stringify(now, null, 1));
+  // Saatlik test: önceki duruma göre yeni sorunlar (ACİL / Uyarı), düzelenler ve devam edenler
+  const { now, newFailures, recovered, ongoing } = HOURLY ? alertState(sites, prev, startedAt) : { now: prev, newFailures: [], recovered: [], ongoing: [] };
+  if (HOURLY && !FAIL_DEMO && !ONLY && !arg('sites')) fs.writeFileSync(STATE, JSON.stringify(now, null, 1));
 
   const run = {
     mode: MODE, startedAt, ms: Date.now() - t0, demo: FAIL_DEMO, sites,
@@ -404,8 +474,9 @@ async function testSite(browser, site, isFirstSite) {
     }
   }
 
-  if (process.env.WEBHOOK_URL && !process.env.NO_MAIL) {
-    const payload = { ...report, mode: MODE, ok: run.ok, critical: run.critical, startedAt, alert: run.alert };
+  // Saatlik testte Make'e sadece mail gidecekse gönderilir (Make işlem sayısı boşa harcanmasın)
+  if (process.env.WEBHOOK_URL && !process.env.NO_MAIL && (MODE === 'full' || report.sendEmail)) {
+    const payload = { ...report, mode: MODE, ok: run.ok, critical: run.critical, startedAt, alert: run.alert, alertLevel: report.level };
     const r = await fetch(process.env.WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     console.log(`Make webhook: HTTP ${r.status}`);
   }

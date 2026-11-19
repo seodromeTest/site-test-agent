@@ -163,8 +163,10 @@ const builder = () => ({
   async run(page, step, file, notes, hooks = {}) {
     const fr = page.frameLocator('iframe[src*="dripappsserver.com/builder"]');
     await step('Builder açılıyor', async () => {
-      // Buton metni ürüne göre değişebilir; birebir metinle ara (regex ^…$ bu butonla eşleşmiyor)
-      const btn = ['Build your own Gang Sheet', 'Build Gang Sheet', 'Create Gang Sheet', 'Start Building']
+      // Buton metni mağazaya ve ürüne göre değişiyor ("Build a Gang Sheet", "Build Your DTF Gang Sheet" …);
+      // uygulamanın kendi butonu her mağazada #gs-builder-btn. Yoksa bilinen metinlerle ara (birebir metin).
+      const own = page.locator('#gs-builder-btn').filter({ visible: true });
+      const btn = (await own.count()) ? own : ['Build your own Gang Sheet', 'Build Gang Sheet', 'Create Gang Sheet', 'Start Building']
         .map(t => page.getByText(t, { exact: true })).reduce((a, b) => a.or(b));
       await btn.first().click();
       await fr.getByText('Start a Brand New Gang Sheet').click({ timeout: 60000 });
@@ -210,6 +212,44 @@ const builder = () => ({
       if (await anyway.isVisible()) await anyway.click();
       await fr.getByText(/you have full rights/i).click();
       await fr.getByRole('button', { name: /Add to Cart & Exit/i }).click();
+    });
+  },
+});
+
+// Cloudlift upload (filepond): hazır gang sheet yükleme alanı ürün formunun içinde (input name="_cl-upload[]").
+// Dosya yüklenince ürün mağazanın normal Add to cart butonuyla eklenir. Sepetteki özellik adı mağaza ayarına göre
+// değişebildiği için fileProp '*': değeri dosya linki olan özellik aranır (run.js Sepet doğrulama).
+const cloudlift = () => ({
+  appName: 'Cloudlift upload',
+  fixture: 'gangsheet',
+  fileProp: '*',
+  accepts: /\.(png|jpe?g|webp|pdf|svg)$/i,
+  matrixFiles: /^gangsheet_/,
+  async read(page) {
+    const t = await page.evaluate(() => document.querySelector('.filepond--root')?.closest('form, section')?.innerText || '');
+    return { uyarilar: warnLines(t) };
+  },
+  async run(page, step, file, notes, hooks = {}) {
+    const form = page.locator('form[action*="/cart/add"]').filter({ has: page.locator('input.filepond--browser') }).first();
+    await step('Upload', async () => {
+      // Yükleme alanı uygulamanın scripti çalışınca oluşuyor
+      const input = form.locator('input.filepond--browser').first();
+      await input.waitFor({ state: 'attached', timeout: 60000 });
+      await input.setInputFiles(file);
+      // filepond her dosyanın durumunu data-filepond-item-state ile gösterir: bitti / hata
+      const done = form.locator('.filepond--item[data-filepond-item-state="processing-complete"]').first();
+      const failed = form.locator('.filepond--item[data-filepond-item-state*="error"], .filepond--item[data-filepond-item-state="load-invalid"]').first();
+      await done.or(failed).waitFor({ state: 'attached', timeout: hooks.uploadTimeout || 120000 });
+      if (await failed.count()) {
+        const msg = (await form.locator('.filepond--file-status-main').first().innerText().catch(() => '')).trim();
+        throw new Error(`Uygulama yüklemeyi reddetti${msg ? `: "${msg.slice(0, 120)}"` : ''}`);
+      }
+    });
+    await hooks.afterUpload?.();
+    await step('Sepete ekle', async () => {
+      const own = form.locator('button[type=submit], button[name=add], input[type=submit]').filter({ visible: true });
+      const btn = (await own.count()) ? own.first() : page.getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first();
+      await btn.click();
     });
   },
 });
@@ -343,12 +383,10 @@ const pageCheck = () => ({
 });
 
 // Bir ürün sayfasını bir uygulamayla eşle. id = ürün handle'ı, expectProduct = sepetteki ürün başlığı.
-const product = (base, handle, title, app) => ({
-  id: handle,
-  title: `${title} (${app.appName})`,
-  url: `${base}/products/${handle}`,
-  expectProduct: title,
-  ...app,
-});
+// handle'da varyant olabilir (ör. 'dtf-gang-sheet?variant=123'): id sadece handle, adres varyantlı.
+const product = (base, handle, title, app) => {
+  const [h, q] = handle.split('?');
+  return { id: h, title: `${title} (${app.appName})`, url: `${base}/products/${h}${q ? '?' + q : ''}`, expectProduct: title, ...app };
+};
 
-module.exports = { uploadStudio, gsUploader, gsStudio, builder, pageCheck, product, ssMatrix, ssLayoutScan, ssQuantity, SS_WIDGET };
+module.exports = { uploadStudio, gsUploader, gsStudio, builder, cloudlift, pageCheck, product, ssMatrix, ssLayoutScan, ssQuantity, SS_WIDGET };

@@ -1,6 +1,6 @@
-// Custom Print AZ – upload ürünleri (4 tanınan uygulama, 4 henüz testi yazılmamış uygulama: sadece sayfa kontrolü).
+// Custom Print AZ – upload ürünleri (pageCheck: uygulaması henüz testte olmayan ürün, sadece sayfa kontrolü).
 // Uygulamaların test adımları apps.js'de.
-const { uploadStudio, gsUploader, gsStudio, pageCheck, product } = require('../apps');
+const { uploadStudio, gsUploader, gsStudio, builder, cloudlift, pageCheck, product } = require('../apps');
 const BASE = 'https://customprintaz.com';
 const p = (handle, title, app) => product(BASE, handle, title, app);
 const gsStudioBasic = () => gsStudio({ input: '#gsb-i2s-file-input' });
@@ -17,8 +17,8 @@ module.exports = {
     p('dtf-gang-sheet', "DTF - Upload Gang Sheet", pageCheck()),
     p('uv-dtf-transfers-by-size', "UV DTF - Transfer By Size", gsStudio()),
     p('fast-uv-gang-sheet-upload', "Fast UV Gang Sheet Upload", uploadStudio()),
-    p('dtf-gang-sheet-builder', "DTF - Build Gang Sheet", pageCheck()),
+    p('dtf-gang-sheet-builder', "DTF - Build Gang Sheet", builder()),
     p('uv-dtf-gang-sheet-1', "UV DTF - Upload Gang Sheet", pageCheck()),
-    p('uv-dtf-gang-sheet', "UV DTF - Build Gang Sheet", pageCheck()),
+    p('uv-dtf-gang-sheet', "UV DTF - Build Gang Sheet", builder()),
   ],
 };

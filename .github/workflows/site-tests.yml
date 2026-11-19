@@ -27,7 +27,8 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 355
+    # Saatlik tur bir sonraki saat başlamadan bitmeli (kod 45 dk'da kalan siteleri atlar)
+    timeout-minutes: ${{ inputs.mode == 'full' && 355 || 55 }}
     steps:
       # Test dosyası kütüphanesi (fixtures/kutuphane, ~100 MB) her saat indirilmesin
       - uses: actions/checkout@v4
@@ -47,11 +48,12 @@ jobs:
 
       - run: npm ci
 
+      # Saatlik testte sadece Chrome; Firefox/Safari sadece genel testte
       - name: Tarayıcıyı kur
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: npx playwright install --with-deps ${{ inputs.mode == 'full' && 'chromium firefox webkit' || 'chromium' }}
 
-      # Uyarı durumu (hangi akış şu an hatalı) turlar arasında saklanır:
-      # yeni sorun → ACİL mail, düzelince → "Düzeldi" maili
+      # Uyarı durumu (hangi kontrol şu an sorunlu) saatlik turlar arasında saklanır (uyari.js):
+      # yeni sorun → ACİL / Uyarı maili, düzelince → "Düzeldi" maili. Genel test bu durumu değiştirmez.
       - name: Önceki uyarı durumunu yükle
         uses: actions/cache/restore@v4
         with:
