@@ -63,7 +63,7 @@ DTF Nash "Custom DTF Transfers By Size": GS Studio sepete ekleyemiyor, `POST /ca
 (/collections/rush-orders). Kullanıcı ekibe iletti. 16 Kasım testinde hâlâ: DTF Nash, Everyday (Gangsheet bulgusu: site 19 Kasım'da testten çıkarıldı).
 Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış alarmdı, PR #18 ile düzeltildi.
 
-## Saatlik kontrol (19 Kasım: kod hazır, gece denemesi ve Make senaryosu bekliyor)
+## Saatlik kontrol (19 Kasım: kod hazır ve canlı denendi; Make senaryosu bekliyor)
 - Liste `saatlik.js` (kullanıcının verdiği 40 URL, 9 site). gangsheet.com 19 Kasım'da kullanıcının isteğiyle testten tamamen çıkarıldı (haftalık ve saatlik).
 - Listede ürünü olan sitede her saat: ana sayfa (süre) + **sıradaki tek upload ürünü** (saat no % ürün sayısı):
   yükle → Add to cart → sepet doğrulama + baskı dosyası linki → sepet sayfası → **checkout** (ödeme sayfası açılıyor,
@@ -79,12 +79,20 @@ Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış a
 - Süre: 45 dk dolunca kalan siteler atlanır; iş 55 dk'da kesilir; saatlik turda sadece Chrome kurulur.
 - `node run.js --mode hourly --plan` siteye bağlanmadan bu saatin planını yazar.
 - Builder ürünlerinin hepsi aynı uygulama (Build a Gang Sheet, dripapps; buton `#gs-builder-btn`, metni mağazaya göre
-  değişir). Ohio ve Arizona hazır sheet ürünleri **Cloudlift upload** (filepond, `_cl-upload[]`): yeni yazıldı, sepetteki
-  özellik adı bilinmiyor (`fileProp: '*'`, değeri link olan özellik) → **gece denemesinde doğrulanacak**.
+  değişir). Mağazaya göre farklılıklar (hepsi `apps.js` builder'da): başlangıç ekranı olmadan doğrudan düzenleyici
+  (Ohio, Custom Print AZ) → görsel "Auto Build" paneline düşer, Apply; Ohio'da ardından "Preview" → Continue;
+  PressCheck kalite penceresi (DTF Nash, Eagle, Ohio) → "Add to Builder"; hak onayı metni farklı (Ohio: "By checking this box…").
+- Ohio ve Arizona hazır sheet ürünleri **Cloudlift upload** (filepond, `_cl-upload[]`; sepette değeri link olan özellik
+  aranır, `fileProp: '*'`). Ohio'da yükleme alanı sepet formunun dışında; çerez penceresi otomatik reddedilir (`lib.js`).
+- DTF Print House'ta normal ürün otomatik bulunamıyordu (hepsi giyim/gang sheet): `core.products` sabit (tote, tişört).
+  Saatlik testte uygun ürün yoksa Add to cart sessizce atlanmaz (Uyarı).
+- Canlı denemeler (19 Kasım gündüz, kullanıcı onayıyla, mailsiz): 15 sitelik tam tur **30 dk** (4 hatalı akışın 2 dk
+  bekleyip tekrarı dahil; hatasız tahmini 18–20 dk). Düzeltmelerden sonra Ohio, Custom Print AZ, DTF Nash, Eagle, Arizona,
+  DTF Print House ürünleri ayrıca denendi: hepsi yükleme → sepet → baskı dosyası → checkout geçti.
+- Deneme için `--only <ürün-id,...>`: saatlik modda sıraya bakmadan o ürünler test edilir (`sites` ile birlikte: mailsiz).
 - Bu değişiklikle listedeki builder ve Cloudlift ürünleri haftalık genel testte de artık gerçekten test ediliyor
   (önce pageCheck). Legend'in eski adresi `dtf-transfer-custom-gang-sheet` açılmıyor → `glitter-dtf-transfer-custom-gang-sheet-upload`.
-- Sıradaki: kullanıcı onayıyla gece tek tur deneme (`sites` girilerek: mail gitmez, durum yazılmaz), sonra Make'te
-  saatlik senaryo (10116955'in kopyası, `inputs.mode=hourly`). Make planı sınırı (ayda ~730 başlatma) ve upload
+- Sıradaki: PR birleşince Make'te saatlik senaryo (10116955'in kopyası, `inputs.mode=hourly`). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.
 
