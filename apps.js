@@ -169,7 +169,13 @@ const builder = () => ({
       const btn = (await own.count()) ? own : ['Build your own Gang Sheet', 'Build Gang Sheet', 'Create Gang Sheet', 'Start Building']
         .map(t => page.getByText(t, { exact: true })).reduce((a, b) => a.or(b));
       await btn.first().click();
-      await fr.getByText('Start a Brand New Gang Sheet').click({ timeout: 60000 });
+      // Çoğu mağazada önce başlangıç ekranı ("Start a Brand New Gang Sheet") geliyor; bazılarında (Ohio, Custom Print AZ)
+      // builder doğrudan düzenleyiciyle ("Auto Build" paneli + solda yükleme alanı) açılıyor
+      const start = fr.getByText('Start a Brand New Gang Sheet');
+      const editor = fr.getByRole('button', { name: /^Upload Image\(s\)$/ });
+      await start.or(editor).first().waitFor({ timeout: 60000 });
+      if (await start.isVisible().catch(() => false)) await start.click();
+      else notes.push('Builder başlangıç ekranı olmadan doğrudan düzenleyiciyle açıldı');
     });
     await step('Upload', async () => {
       await fr.locator('input[type=file]').first().setInputFiles(file);
@@ -183,8 +189,22 @@ const builder = () => ({
       await page.waitForTimeout(3000);
       // Yarı saydam pikselli görsellerde "Transparent Warning" penceresi çıkıyor: uyarıyı not et, Continue ile devam et
       const transparentWarn = fr.getByText(/^(Transparent|Background) Warning$/);
+      // Bazı mağazalarda (DTF Nash, Eagle) yüklenen görsel önce PressCheck kalite penceresinde açılıyor: "Add to Builder"
+      const pressCheck = fr.getByRole('button', { name: /^Add to Builder$/ }).or(page.getByRole('button', { name: /^Add to Builder$/ })).first();
+      let pressChecked = false;
       while (!(await placed.isVisible())) {
         if (Date.now() > deadline) throw new Error('Görsel sheet\'e yerleştirilemedi');
+        if (await pressCheck.isVisible().catch(() => false)) {
+          if (!pressChecked) {
+            const score = await fr.getByText(/BATCH SCORE/i).locator('xpath=..').innerText().catch(() => '');
+            notes.push(`Builder PressCheck kalite penceresi açtı${score ? ` (${score.replace(/\s+/g, ' ').trim().slice(0, 60)})` : ''}, "Add to Builder" ile devam edildi`);
+            hooks.onWarning?.('PressCheck');
+            pressChecked = true;
+          }
+          await pressCheck.click().catch(() => {});
+          await page.waitForTimeout(3000);
+          continue;
+        }
         if (await transparentWarn.isVisible()) {
           const title = (await transparentWarn.innerText()).trim();
           notes.push(`Builder "${title}" penceresi açtı (görselde ${/Background/.test(title) ? 'arka plan' : 'yarı saydam pikseller'} var)`);
