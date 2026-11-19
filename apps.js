@@ -169,7 +169,13 @@ const builder = () => ({
       const btn = (await own.count()) ? own : ['Build your own Gang Sheet', 'Build Gang Sheet', 'Create Gang Sheet', 'Start Building']
         .map(t => page.getByText(t, { exact: true })).reduce((a, b) => a.or(b));
       await btn.first().click();
-      await fr.getByText('Start a Brand New Gang Sheet').click({ timeout: 60000 });
+      // Çoğu mağazada önce başlangıç ekranı ("Start a Brand New Gang Sheet") geliyor; bazılarında (Ohio, Custom Print AZ)
+      // builder doğrudan düzenleyiciyle ("Auto Build" paneli + solda yükleme alanı) açılıyor
+      const start = fr.getByText('Start a Brand New Gang Sheet');
+      const editor = fr.getByRole('button', { name: /^Upload Image\(s\)$/ });
+      await start.or(editor).first().waitFor({ timeout: 60000 });
+      if (await start.isVisible().catch(() => false)) await start.click();
+      else notes.push('Builder başlangıç ekranı olmadan doğrudan düzenleyiciyle açıldı');
     });
     await step('Upload', async () => {
       await fr.locator('input[type=file]').first().setInputFiles(file);
@@ -183,8 +189,36 @@ const builder = () => ({
       await page.waitForTimeout(3000);
       // Yarı saydam pikselli görsellerde "Transparent Warning" penceresi çıkıyor: uyarıyı not et, Continue ile devam et
       const transparentWarn = fr.getByText(/^(Transparent|Background) Warning$/);
+      // Bazı mağazalarda (DTF Nash, Eagle) yüklenen görsel önce PressCheck kalite penceresinde açılıyor: "Add to Builder"
+      const pressCheck = fr.getByRole('button', { name: /^Add to Builder$/ }).or(page.getByRole('button', { name: /^Add to Builder$/ })).first();
+      let pressChecked = false;
       while (!(await placed.isVisible())) {
         if (Date.now() > deadline) throw new Error('Görsel sheet\'e yerleştirilemedi');
+        // Düzenleyiciyle doğrudan açılan builder'da (Ohio, Custom Print AZ) görsel "Auto Build" paneline düşüyor: Apply ile sheet'e yerleşir
+        const apply = fr.getByRole('button', { name: /^Apply$/ }).first();
+        if (await apply.isVisible().catch(() => false)) {
+          await apply.click().catch(() => {});
+          await page.waitForTimeout(4000);
+          continue;
+        }
+        // Apply'dan sonra bazı mağazalarda (Ohio) "Preview" ekranı: sheet ölçüsü gösterilir, Continue ile yerleşir
+        const preview = fr.getByText(/^Preview$/).first();
+        if (await preview.isVisible().catch(() => false)) {
+          await fr.getByRole('button', { name: /^Continue$/ }).first().click().catch(() => {});
+          await page.waitForTimeout(4000);
+          continue;
+        }
+        if (await pressCheck.isVisible().catch(() => false)) {
+          if (!pressChecked) {
+            const score = await fr.getByText(/BATCH SCORE/i).locator('xpath=..').innerText().catch(() => '');
+            notes.push(`Builder PressCheck kalite penceresi açtı${score ? ` (${score.replace(/\s+/g, ' ').trim().slice(0, 60)})` : ''}, "Add to Builder" ile devam edildi`);
+            hooks.onWarning?.('PressCheck');
+            pressChecked = true;
+          }
+          await pressCheck.click().catch(() => {});
+          await page.waitForTimeout(3000);
+          continue;
+        }
         if (await transparentWarn.isVisible()) {
           const title = (await transparentWarn.innerText()).trim();
           notes.push(`Builder "${title}" penceresi açtı (görselde ${/Background/.test(title) ? 'arka plan' : 'yarı saydam pikseller'} var)`);
@@ -210,7 +244,10 @@ const builder = () => ({
       await hooks.onQualityCheck?.(checks);
       const anyway = fr.getByText('Print Anyway');
       if (await anyway.isVisible()) await anyway.click();
-      await fr.getByText(/you have full rights/i).click();
+      // Hak onayı metni mağazaya göre değişiyor ("you have full rights…" / "By checking this box, you confirm … own the rights…")
+      const rights = fr.getByText(/you have full rights|own the rights to this artwork|by checking this box/i).first();
+      const box = rights.locator('xpath=ancestor::*[.//input[@type="checkbox"]][1]').locator('input[type=checkbox]').first();
+      if (await box.count()) await box.check({ force: true }); else await rights.click();
       await fr.getByRole('button', { name: /Add to Cart & Exit/i }).click();
     });
   },
@@ -230,8 +267,12 @@ const cloudlift = () => ({
     return { uyarilar: warnLines(t) };
   },
   async run(page, step, file, notes, hooks = {}) {
-    const form = page.locator('form[action*="/cart/add"]').filter({ has: page.locator('input.filepond--browser') }).first();
+    // Yükleme alanı çoğu temada sepet formunun içinde; bazılarında (Ohio) formun dışında: o zaman sayfanın tamamında ara
+    const inForm = page.locator('form[action*="/cart/add"]').filter({ has: page.locator('input.filepond--browser') }).first();
+    let form = page.locator('body');
     await step('Upload', async () => {
+      await page.locator('input.filepond--browser').first().waitFor({ state: 'attached', timeout: 60000 });
+      if (await inForm.count()) form = inForm;
       // Yükleme alanı uygulamanın scripti çalışınca oluşuyor
       const input = form.locator('input.filepond--browser').first();
       await input.waitFor({ state: 'attached', timeout: 60000 });
@@ -247,8 +288,8 @@ const cloudlift = () => ({
     });
     await hooks.afterUpload?.();
     await step('Sepete ekle', async () => {
-      const own = form.locator('button[type=submit], button[name=add], input[type=submit]').filter({ visible: true });
-      const btn = (await own.count()) ? own.first() : page.getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first();
+      const own = form === inForm ? form.locator('button[type=submit], button[name=add], input[type=submit]').filter({ visible: true }) : null;
+      const btn = own && (await own.count()) ? own.first() : page.locator('form[action*="/cart/add"]').getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first();
       await btn.click();
     });
   },

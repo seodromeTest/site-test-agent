@@ -100,6 +100,8 @@ function coreFlow(site, { search = true } = {}) {
             && !/bundle|printer|shaker|dryer|press|shirt|hoodie|sweatshirt|tee\b|apparel|gildan|bella|installation/i.test(p.title + ' ' + p.product_type)
             && p.variants.length <= 10 && p.variants.some(v => v.available && +v.price > 0 && +v.price < 150)).slice(0, 3).map(p => p.handle);
         }, site.flows.map(f => f.id));
+        // Saatlik testte Add to cart mutlaka denenmeli: uygun ürün yoksa bu sessizce geçilmez (Uyarı)
+        if (!candidates.length && HOURLY) throw new Error('Sepete ekleme için uygun test ürünü bulunamadı (site dosyasında core.products verilmeli)');
         if (!candidates.length) { notes.push('Sepete ekleme için uygun test ürünü bulunamadı; sepet ve checkout adımları atlandı'); result.skipCart = true; return; }
         for (const h of candidates) {
           const p = await page.evaluate(h => fetch(`${window.Shopify?.routes?.root || '/'}products/${h}.js`).then(r => r.ok ? r.json() : null).catch(() => null), h);
@@ -330,6 +332,8 @@ function hourlyFlows(site, prev = {}) {
     return { ...flow, url: u }; // adres saatlik listedeki gibi (varyantlı olabilir)
   });
   if (!list.length) return [coreFlow(site, { search: false })];
+  // Deneme: --only verilmişse sıraya bakılmaz, listedeki o ürünler test edilir (ör. --only anasayfa,dtf-gang-sheet)
+  if (ONLY) return [homeFlow(site), ...list];
   const pick = [list[HOUR % list.length]];
   // Sorunu olan (uyarı maili gitmiş) ürünler düzelene kadar her saat ayrıca denenir: "Düzeldi" maili geç kalmasın
   for (const f of list) {

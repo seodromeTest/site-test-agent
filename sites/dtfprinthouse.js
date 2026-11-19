@@ -10,7 +10,8 @@ module.exports = {
   domain: 'dtfprinthouse.com',
   base: BASE,
   // Ana fonksiyon testi: test ürünü otomatik seçilir (upload ürünü olmayan, stokta ilk ürün)
-  core: { search: 'dtf' },
+  // Mağazada giyim ve gang sheet dışında normal ürün yok: otomatik seçim bulamıyor, test ürünü sabit
+  core: { search: 'dtf', products: ['q-tees-economical-tote-qtb', 'unisex-heavy-cotton-tm-t-shirt'] },
   flows: [
     p('custom-dtf-transfers-by-size', "Custom DTF Transfers by Size", gsStudioBasic()),
     p('upload-uv-dtf-transfer', "Upload UV DTF Gang Sheet -  Custom UV DTF Transfer", pageCheck()),
