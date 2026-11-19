@@ -194,6 +194,13 @@ const builder = () => ({
       let pressChecked = false;
       while (!(await placed.isVisible())) {
         if (Date.now() > deadline) throw new Error('Görsel sheet\'e yerleştirilemedi');
+        // Düzenleyiciyle doğrudan açılan builder'da (Ohio, Custom Print AZ) görsel "Auto Build" paneline düşüyor: Apply ile sheet'e yerleşir
+        const apply = fr.getByRole('button', { name: /^Apply$/ }).first();
+        if (await apply.isVisible().catch(() => false)) {
+          await apply.click().catch(() => {});
+          await page.waitForTimeout(4000);
+          continue;
+        }
         if (await pressCheck.isVisible().catch(() => false)) {
           if (!pressChecked) {
             const score = await fr.getByText(/BATCH SCORE/i).locator('xpath=..').innerText().catch(() => '');
@@ -250,8 +257,12 @@ const cloudlift = () => ({
     return { uyarilar: warnLines(t) };
   },
   async run(page, step, file, notes, hooks = {}) {
-    const form = page.locator('form[action*="/cart/add"]').filter({ has: page.locator('input.filepond--browser') }).first();
+    // Yükleme alanı çoğu temada sepet formunun içinde; bazılarında (Ohio) formun dışında: o zaman sayfanın tamamında ara
+    const inForm = page.locator('form[action*="/cart/add"]').filter({ has: page.locator('input.filepond--browser') }).first();
+    let form = page.locator('body');
     await step('Upload', async () => {
+      await page.locator('input.filepond--browser').first().waitFor({ state: 'attached', timeout: 60000 });
+      if (await inForm.count()) form = inForm;
       // Yükleme alanı uygulamanın scripti çalışınca oluşuyor
       const input = form.locator('input.filepond--browser').first();
       await input.waitFor({ state: 'attached', timeout: 60000 });
@@ -267,8 +278,8 @@ const cloudlift = () => ({
     });
     await hooks.afterUpload?.();
     await step('Sepete ekle', async () => {
-      const own = form.locator('button[type=submit], button[name=add], input[type=submit]').filter({ visible: true });
-      const btn = (await own.count()) ? own.first() : page.getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first();
+      const own = form === inForm ? form.locator('button[type=submit], button[name=add], input[type=submit]').filter({ visible: true }) : null;
+      const btn = own && (await own.count()) ? own.first() : page.locator('form[action*="/cart/add"]').getByRole('button', { name: /add to cart/i }).filter({ visible: true }).first();
       await btn.click();
     });
   },

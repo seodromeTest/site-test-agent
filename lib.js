@@ -19,6 +19,8 @@ async function newPage(browser, opts) {
   const log = sessionLog(page, BLOCKED);
   // Pazarlama pop-up'ları testi bloklamasın
   await page.addLocatorHandler(page.locator('button.klaviyo-close-form').first(), async l => { await l.click({ force: true, timeout: 3000 }).catch(() => {}); }, { noWaitAfter: true });
+  // Çerez penceresi (ör. Ohio) butonların önünü kapatabiliyor: çıkarsa reddet
+  await page.addLocatorHandler(page.getByRole('button', { name: /^Decline all cookies$/i }).first(), async l => { await l.click({ timeout: 3000 }).catch(() => {}); }, { noWaitAfter: true });
   await page.addInitScript(() => {
     const s = document.createElement('style');
     // Judge.me kartları ve Klaviyo e-posta pop-up'ı ("Sign Up & Get 20% Off") butonların önünü kapatıyor
