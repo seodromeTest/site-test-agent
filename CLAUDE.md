@@ -3,7 +3,7 @@
 Bu dosya her yeni oturumda okunur. Kullanıcıyla Türkçe konuş. Bütün saatler **Berlin saati** ile konuşulur.
 
 ## Ne yapıyor
-16 Shopify sitesini gerçek tarayıcıyla (Playwright: Chrome, Firefox, Safari/WebKit) test eder, sonucu Make üzerinden
+15 Shopify sitesini gerçek tarayıcıyla (Playwright: Chrome, Firefox, Safari/WebKit) test eder, sonucu Make üzerinden
 seodrome@gmail.com'a mail atar (HTML tablo + Excel eki). Sipariş verilmez, ödeme yapılmaz.
 
 ## Zincir
@@ -47,7 +47,7 @@ Make senaryoları (team 1840541, saat dilimi Berlin):
 - `detay.js` her kontrol için rapor satırı (mail ve Excel aynı satırları kullanır). `report.js` mail HTML.
   `excel.js` Excel. `lib.js` tarayıcı oturumu, pop-up gizleme, oturum kaydı, teşhis. `saatlik.js` saatlik liste,
   `uyari.js` saatlik uyarı seviyesi ve durumu.
-- `sites/*.js` 16 site (fastdtf* önce çalışır). `fixtures/` test görselleri. `matrix.js` dosya türü matrisi
+- `sites/*.js` 15 site (fastdtf* önce çalışır). `fixtures/` test görselleri. `matrix.js` dosya türü matrisi
   (ayrı araç, gece testinde yok; hâlâ paralel çalışıyor, sıralıya çevrilmeli).
 - Yerel çalıştırma: `node run.js --mode full --sites <site> --only <akış-id,...>` (argümanlar boşlukla). Bu ortamda
   node `fetch` için `NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt` gerekir (yoksa "fetch failed").
@@ -60,11 +60,11 @@ sadece bilgi; By Size düşük çözünürlük uyarısı vermiyor; Facebook = fa
 DTF Nash "Custom DTF Transfers By Size": GS Studio sepete ekleyemiyor, `POST /cart/add.js → 422 Cannot find variant`
 (3 tarayıcıda). DTF Nash sayfasında "Unexpected token '}'" JS hatası, YouTube @dtfnash 404. Gangsheet.com ana sayfa
 "Blank Apparel" sekmesinde tema örnek kartları (/admin'e gidiyor). Everyday "Same Day" menüsü boş koleksiyon
-(/collections/rush-orders). Kullanıcı ekibe iletti. 16 Kasım testinde hâlâ: DTF Nash, Everyday, Gangsheet.
+(/collections/rush-orders). Kullanıcı ekibe iletti. 16 Kasım testinde hâlâ: DTF Nash, Everyday (Gangsheet bulgusu: site 19 Kasım'da testten çıkarıldı).
 Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış alarmdı, PR #18 ile düzeltildi.
 
 ## Saatlik kontrol (19 Kasım: kod hazır, gece denemesi ve Make senaryosu bekliyor)
-- Liste `saatlik.js` (kullanıcının verdiği 40 URL, 9 site). gangsheet.com saatlik testte yok (`haric`).
+- Liste `saatlik.js` (kullanıcının verdiği 40 URL, 9 site). gangsheet.com 19 Kasım'da kullanıcının isteğiyle testten tamamen çıkarıldı (haftalık ve saatlik).
 - Listede ürünü olan sitede her saat: ana sayfa (süre) + **sıradaki tek upload ürünü** (saat no % ürün sayısı):
   yükle → Add to cart → sepet doğrulama + baskı dosyası linki → sepet sayfası → **checkout** (ödeme sayfası açılıyor,
   sipariş özeti görünüyor; bilgi girilmez). Builder ürünlerinde sonuna kadar (Save & Add to Cart) gidilir.
