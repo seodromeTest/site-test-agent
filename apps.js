@@ -201,6 +201,13 @@ const builder = () => ({
           await page.waitForTimeout(4000);
           continue;
         }
+        // Apply'dan sonra bazı mağazalarda (Ohio) "Preview" ekranı: sheet ölçüsü gösterilir, Continue ile yerleşir
+        const preview = fr.getByText(/^Preview$/).first();
+        if (await preview.isVisible().catch(() => false)) {
+          await fr.getByRole('button', { name: /^Continue$/ }).first().click().catch(() => {});
+          await page.waitForTimeout(4000);
+          continue;
+        }
         if (await pressCheck.isVisible().catch(() => false)) {
           if (!pressChecked) {
             const score = await fr.getByText(/BATCH SCORE/i).locator('xpath=..').innerText().catch(() => '');
@@ -237,7 +244,10 @@ const builder = () => ({
       await hooks.onQualityCheck?.(checks);
       const anyway = fr.getByText('Print Anyway');
       if (await anyway.isVisible()) await anyway.click();
-      await fr.getByText(/you have full rights/i).click();
+      // Hak onayı metni mağazaya göre değişiyor ("you have full rights…" / "By checking this box, you confirm … own the rights…")
+      const rights = fr.getByText(/you have full rights|own the rights to this artwork|by checking this box/i).first();
+      const box = rights.locator('xpath=ancestor::*[.//input[@type="checkbox"]][1]').locator('input[type=checkbox]').first();
+      if (await box.count()) await box.check({ force: true }); else await rights.click();
       await fr.getByRole('button', { name: /Add to Cart & Exit/i }).click();
     });
   },
