@@ -157,8 +157,8 @@ function build(run) {
     kind: newFailures.length ? 'alert' : recovered.length ? 'recovered' : isFull ? 'report' : 'ok',
     level, subject, html,
     sendEmail: isFull || newFailures.length > 0 || recovered.length > 0 || run.demo,
-    screenshotName: shotFlow ? `hata-${shotFlow.domain}-${shotFlow.id}.jpg` : '',
-    screenshot: shotFlow ? shotFlow.screenshot : '',
+    // Ekran görüntüsü yoksa alanlar hiç gönderilmez: Make mail senaryosu (10051850) yolu "screenshot exist / notexist" ile seçiyor
+    ...(shotFlow ? { screenshotName: `hata-${shotFlow.domain}-${shotFlow.id}.jpg`, screenshot: shotFlow.screenshot } : {}),
   };
 }
 

@@ -19,7 +19,12 @@ Make senaryoları (team 1840541, saat dilimi Berlin):
 - 10116955 "Site testi – Haftalık genel test": **her pazartesi 05:30 Berlin**, mode=full. Aktif.
 - 10109223 "Site testi – GitHub'da genel testi başlat (elle)": on-demand, istenince hemen genel test.
 - 10051850 mail senaryosu. 10044058 eski Make-only link testi: kapalı, kullanılmıyor.
-- Saatlik kontrol için Make senaryosu henüz YOK (aşağıya bak).
+- **10203711 "Site testi – Saatlik kontrol (deneme: Cmt 03:00 – Pzt 05:00 Berlin)"**: her saat (interval 3600), mode=hourly,
+  `between` 21 Kasım 03:00 – 23 Kasım 04:59 Berlin (ilk tur Cmt 03:00, son tur Pzt 04:00; 05:30 genel testle çakışmaz).
+  Aktif. Deneme bitince kullanıcıyla sonuca bakılıp kalıcı saatlik senaryoya çevrilecek (between kaldırılır).
+- Mail senaryosu 10051850 yolları: (1) sendEmail + ekran görüntüsü yok + Excel yok → düz mail (saatlik Uyarı/Düzeldi),
+  (2) sendEmail + ekran görüntüsü → ekli mail (saatlik ACİL), (3) sendEmail + Excel → genel test raporu. `report.js`
+  ekran görüntüsü yoksa `screenshot` alanını hiç göndermez.
 
 ## Kurallar (kullanıcının koyduğu)
 - Kullanıcının onayı olmadan test başlatma. Gün içinde (yük/bot koruması) test yapılmaz; tam testler gece/haftalık.
@@ -92,7 +97,7 @@ Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış a
 - Deneme için `--only <ürün-id,...>`: saatlik modda sıraya bakmadan o ürünler test edilir (`sites` ile birlikte: mailsiz).
 - Bu değişiklikle listedeki builder ve Cloudlift ürünleri haftalık genel testte de artık gerçekten test ediliyor
   (önce pageCheck). Legend'in eski adresi `dtf-transfer-custom-gang-sheet` açılmıyor → `glitter-dtf-transfer-custom-gang-sheet-upload`.
-- Sıradaki: PR birleşince Make'te saatlik senaryo (10116955'in kopyası, `inputs.mode=hourly`). Make planı sınırı (ayda ~730 başlatma) ve upload
+- Make'te saatlik senaryo kuruldu (10203711, 21–23 Kasım deneme; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.
 
