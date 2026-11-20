@@ -30,7 +30,7 @@ async function newPage(browser, opts) {
     if (document.documentElement) document.documentElement.appendChild(s);
   });
   const jsErrors = [];
-  page.on('pageerror', e => jsErrors.push(e.message.slice(0, 200)));
+  page.on('pageerror', e => { if (!isNoise({ kind: 'jserror', text: e.message })) jsErrors.push(e.message.slice(0, 200)); });
   page.setDefaultTimeout(45000);
   return { ctx, page, jsErrors, log };
 }
@@ -41,8 +41,10 @@ async function newPage(browser, opts) {
 const ASSET = /\.(png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|css)(\?|$)/i;
 // Sitenin çalışmasıyla ilgisi olmayan, her Shopify sitesinde görülen kayıtlar: analitik/piksel (bir kısmını biz engelliyoruz),
 // Shop Pay ön yüklemeleri, piksel sandbox uyarıları. Bunlar teşhiste ve konsol özetinde gösterilmez.
-const NOISE = /shop\.app|pay\.shopify|monorail|\/api\/collect|web-pixels|\/wpm\/|\/wpm@|analytics|clarity|pixel|sandboxed environment|Blocked a frame with origin "null"|importScripts|was preloaded using link preload|shopify_pay\/accelerated_checkout|checkout-web\/assets|klaviyo|facebook|tiktok|pinterest|googletagmanager|gtag|doubleclick|bing\.com|_shopify_test|has been rejected for invalid domain|NetworkError when attempting to fetch resource|Unsafe attempt to load URL https:\/\/cdn\.shopify\.com\/shopifycloud\/customer-authentication/i;
-const isNoise = e => NOISE.test(e.url || '') || NOISE.test(e.text || '');
+const NOISE = /shop\.app|pay\.shopify|monorail|\/api\/collect|web-pixels|\/wpm\/|\/wpm@|analytics|clarity|pixel|sandboxed environment|Blocked a frame with origin "null"|importScripts|was preloaded using link preload|shopify_pay\/accelerated_checkout|checkout-web\/assets|klaviyo|facebook|tiktok|pinterest|googletagmanager|gtag|doubleclick|bing\.com|_shopify_test|has been rejected for invalid domain|NetworkError when attempting to fetch resource|Unsafe attempt to load URL https:\/\/cdn\.shopify\.com\/shopifycloud\/customer-authentication|Connecting to 'data:,'|Fetch API cannot load data:,|font-size:0;color:transparent|Framing 'https:\/\/(shop\.app|www\.google\.com)\/?'|Permissions policy violation/i;
+// Sitenin kodu değil, testin engellediği scriptlerden (TikTok, Facebook …) doğan yakalanmamış hata: gerçek müşteride olmaz
+const NOISE_JS = /^Failed to fetch$/;
+const isNoise = e => NOISE.test(e.url || '') || NOISE.test(e.text || '') || (e.kind === 'jserror' && NOISE_JS.test(e.text || ''));
 const LIFECYCLE = new Set(['fetch', 'xhr', 'document']); // adımın bitmesi beklenen istekler
 function sessionLog(page, blocked) {
   const events = [], inflight = new Map();
