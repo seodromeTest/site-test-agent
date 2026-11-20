@@ -264,7 +264,9 @@ async function runFlow(browser, site, flow, demoBreak) {
   result.ms = Date.now() - t0;
   if (jsErrors.length) result.jsErrors = [...new Set(jsErrors)].slice(0, 5);
   // Akış boyunca konsola düşen hatalar (başarılı akışlarda da raporda bilgi olarak görünür)
-  const konsol = [...new Set(log.events.filter(e => e.kind === 'console' && e.level === 'error').map(e => e.text.slice(0, 160)))];
+  // Sayfanın kendi JS hataları da (ör. bozuk script) burada görünsün; testin engellediği scriptlerin hataları kayda girmez (lib.js NOISE)
+  const konsol = [...new Set(log.events.filter(e => (e.kind === 'console' && e.level === 'error') || e.kind === 'jserror')
+    .map(e => (e.kind === 'jserror' ? 'JS hatası: ' : '') + e.text.slice(0, 160)))];
   if (konsol.length) result.konsol = konsol.slice(0, 5);
   await withTimeout(ctx.close(), 15000, 'close').catch(() => {});
   return result;

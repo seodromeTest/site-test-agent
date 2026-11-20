@@ -68,6 +68,18 @@ DTF Nash "Custom DTF Transfers By Size": GS Studio sepete ekleyemiyor, `POST /ca
 (/collections/rush-orders). Kullanıcı ekibe iletti. 16 Kasım testinde hâlâ: DTF Nash, Everyday (Gangsheet bulgusu: site 19 Kasım'da testten çıkarıldı).
 Eagle'daki "boş koleksiyon" (/collections/vendors?q=Eagle+DTF+Print) yanlış alarmdı, PR #18 ile düzeltildi.
 
+## Bilinen konsol / JS hataları (20 Kasım değerlendirmesi; kullanıcı ekibe iletecek)
+Sitenin kendi kodu: FastDTF Supply "Eagle cart recovery" pop-up scripti `'Wait! Don't Leave Yet'` tırnak hatası → script hiç
+çalışmıyor (`Unexpected identifier 't'`). Everyday sepet sayfası "CART DATA BUILDER" scriptinde eksik `}`. DTF Bank: telefon
+formatı regex'i `/…/` olmadan (`Unexpected token '^'`), ProductGroup şema temizleme scripti yarım (`Unexpected end of input`),
+sunucu taraflı GTM (gtm.dtfbank.com/g/collect) CORS'a takılıyor + özel pikselde geçersiz URL. Eagle: LinkedIn kodu iki kez
+(`LinkedinScript already declared`), bir uygulama scripti modül değil (`import statement outside a module`). DTF Print House: BOM
+temizleme scripti `removeChild` null (zararsız). Uygulama: dripapps `builder-button` script etiketi MIME'siz (Alpha, Chili,
+Ohio, Eagle x2) → çalışmıyor ama builder app block ile çalışıyor, müşteriye etkisi yok.
+Ayıklanan (raporda görünmez, `lib.js` NOISE/NOISE_JS): testin engellediği TikTok vb. (`importScripts`, yakalanmamış
+`Failed to fetch`), Shopify piksel sandbox, Cloudflare Turnstile (`data:,` CSP, `%c%d font-size`), shop.app/google framing,
+permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sayfanın JS hatalarını da içeriyor ("JS hatası: …").
+
 ## Saatlik kontrol (19 Kasım: kod hazır ve canlı denendi; Make senaryosu bekliyor)
 - Liste `saatlik.js` (kullanıcının verdiği 40 URL, 9 site). gangsheet.com 19 Kasım'da kullanıcının isteğiyle testten tamamen çıkarıldı (haftalık ve saatlik).
 - Listede ürünü olan sitede her saat: ana sayfa (süre) + **sıradaki tek upload ürünü** (saat no % ürün sayısı):

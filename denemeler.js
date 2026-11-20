@@ -59,6 +59,30 @@ async function deneme(ad, fn) {
       { url: 'https://dtfnash.com/cart/add.js', text: 'Cannot find variant' }])
       assert.ok(!isNoise(e), JSON.stringify(e));
   });
+  // 20 Kasım: test kaynaklı (engellenen TikTok vb.) ve Shopify/Cloudflare olağan mesajları raporda görünmesin
+  await deneme('Test kaynaklı ve Shopify/Cloudflare olağan mesajlar ayıklanır (20 Kasım)', () => {
+    for (const e of [
+      { kind: 'jserror', text: "Failed to execute 'importScripts' on 'WorkerGlobalScope': The script at 'https://analytics.tiktok.com/i18n/pixel/shopify.js' failed to load." },
+      { kind: 'jserror', text: 'Failed to fetch' },
+      { kind: 'jserror', text: `Failed to read a named property 'document' from 'Window': Blocked a frame with origin "null" from accessing a cross-origin frame.` },
+      { kind: 'console', text: "Connecting to 'data:,' violates the following Content Security Policy directive: \"connect-src 'self'\"" },
+      { kind: 'console', text: "Fetch API cannot load data:,. Refused to connect because it violates the document's Content Security Policy." },
+      { kind: 'console', text: '%c%d font-size:0;color:transparent NaN' },
+      { kind: 'console', text: "Framing 'https://www.google.com/' violates the following report-only Content Security Policy directive" },
+      { kind: 'console', text: 'Permissions policy violation: compute-pressure is not allowed in this document.' },
+    ]) assert.ok(isNoise(e), e.text);
+  });
+  await deneme('Kontrol: sitelerin gerçek JS/konsol hataları ayıklanmaz (20 Kasım değerlendirmesi)', () => {
+    for (const e of [
+      { kind: 'jserror', text: "Unexpected identifier 't'" },                       // FastDTF Supply cart recovery
+      { kind: 'jserror', text: "Unexpected token '^'" },                            // DTF Bank telefon formatı
+      { kind: 'jserror', text: 'Unexpected end of input' },                         // DTF Bank şema scripti
+      { kind: 'jserror', text: "Identifier 'LinkedinScript' has already been declared" }, // Eagle
+      { kind: 'jserror', text: "Cannot read properties of null (reading 'removeChild')" }, // DTF Print House
+      { kind: 'console', text: "Refused to execute script from 'https://app.dripappsserver.com/shopify/script/builder-button?shop=x' because its MIME type ('') is not executable" },
+      { kind: 'console', text: 'TypeError: Failed to fetch' },                     // konsoldaki fetch hatası (sayfa yakalamış) görünür kalır
+    ]) assert.ok(!isNoise(e), e.text);
+  });
   await deneme('Teşhis: sepete ekleme reddi en önde gösterilir', () => {
     const t = diagnose([{ t: 1, kind: 'console', level: 'error', text: 'x' },
       { t: 2, kind: 'network', level: 'warning', method: 'POST', url: 'https://dtfnash.com/cart/add.js', status: 422, text: 'Cannot find variant', type: 'fetch' }], 'dtfnash.com');
