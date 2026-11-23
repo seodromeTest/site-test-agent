@@ -8,7 +8,9 @@
 // "Supported formats" yazısı). Saatlik testte ürünün her turunda bunlardan SIRADAKİ tek dosya yüklenir
 // (fixtures/formatlar/gangsheet|builder/, hepsi 300 DPI ya da vektör). Sıra: FORMAT_SIRASI.
 const FORMAT_SIRASI = ['png', 'jpg', 'pdf', 'svg', 'psd', 'ai', 'eps', 'webp', 'tif'];
-const BUILDER = ['png', 'jpg', 'svg', 'psd', 'ai', 'eps', 'pdf'];
+// Builder ai/eps de kabul ettiğini söylüyor ama 23 Kasım ilk turunda (5 sitede) test ai/eps dosyası seçilince builder hiçbir
+// şey yapmadı (yükleme isteği yok, hata mesajı yok). Gerçek Illustrator/EPS dosyasıyla doğrulanana kadar builder sırasında yok.
+const BUILDER = ['png', 'jpg', 'svg', 'psd', 'pdf'];
 const BUILDER_WEBP = [...BUILDER, 'webp'];
 const GS_UPLOADER = ['png', 'jpg', 'svg', 'psd', 'ai', 'eps', 'pdf', 'webp'];
 const formatlar = {
@@ -46,12 +48,12 @@ const formatlar = {
   'eagledtfprint.com/uv-dtf-gang-sheet': ['png', 'jpg', 'svg', 'psd', 'ai', 'eps', 'pdf'],
   'eagledtfprint.com/glitter-dtf-gang-sheets': ['png', 'jpg', 'svg', 'psd', 'ai', 'eps', 'pdf'],
   'eagledtfprint.com/upload-your-glow-in-the-dark-dtf-gang-sheet': ['png', 'jpg', 'svg', 'psd', 'ai', 'eps', 'pdf'],
-  'eagledtfprint.com/build-dtf-gang-sheet': ['png', 'jpg', 'psd', 'ai', 'eps', 'pdf'],               // builder, svg yok
-  'eagledtfprint.com/uv-gang-sheet-builder': ['png', 'jpg', 'psd', 'ai', 'eps', 'pdf'],
-  'eagledtfprint.com/glitter-dtf-gang-sheet-builder': ['png', 'jpg', 'psd', 'ai', 'eps', 'pdf'],
-  'eagledtfprint.com/glow-dark-dtf-gang-sheet': ['png', 'jpg', 'psd', 'ai', 'eps', 'pdf'],
-  'chilitransfers.com/dtf-gang-sheet-builder': ['png', 'jpg', 'svg', 'ai', 'eps', 'pdf'],           // builder, psd yok
-  'chilitransfers.com/uv-dtf-gang-sheet-builder': ['png', 'jpg', 'svg', 'ai', 'eps', 'pdf'],
+  'eagledtfprint.com/build-dtf-gang-sheet': ['png', 'jpg', 'psd', 'pdf'],               // builder, svg yok (ai/eps geçici olarak yok, yukarıda)
+  'eagledtfprint.com/uv-gang-sheet-builder': ['png', 'jpg', 'psd', 'pdf'],
+  'eagledtfprint.com/glitter-dtf-gang-sheet-builder': ['png', 'jpg', 'psd', 'pdf'],
+  'eagledtfprint.com/glow-dark-dtf-gang-sheet': ['png', 'jpg', 'psd', 'pdf'],
+  'chilitransfers.com/dtf-gang-sheet-builder': ['png', 'jpg', 'svg', 'pdf'],           // builder, psd yok (ai/eps geçici olarak yok)
+  'chilitransfers.com/uv-dtf-gang-sheet-builder': ['png', 'jpg', 'svg', 'pdf'],
 };
 
 module.exports = {
