@@ -117,6 +117,10 @@ permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sa
   Saatlik testte ürünün her turunda SIRADAKİ tek tür yüklenir (tur no = saat no / sitedeki ürün sayısı; sıra
   `FORMAT_SIRASI`). Arizona Cloudlift sadece PNG; Eagle builder svg almaz, Eagle GS uploader webp almaz; Chili builder psd
   almaz; tif sadece Ohio Cloudlift. Uyarı mailinde test dosyasının adı yazar. `--format <uzantı>` deneme için türü zorlar.
+- **Builder + AI/EPS (23 Kasım, açık):** ilk turda 5 sitede (FastDTF, Chili, DTF Nash, Ohio, Legend) test ai/eps dosyası seçilince
+  builder hiçbir şey yapmadı: yükleme isteği yok, hata mesajı yok (FastDTF'te ağ kaydıyla doğrulandı). PDF ve PSD çalıştı.
+  Test dosyası mı (elle üretilmiş ai = PDF içerik, basit EPS) yoksa builder mı, gerçek Illustrator/EPS dosyasıyla ayrılacak;
+  o zamana kadar ai/eps builder sırasında yok (`saatlik.js` BUILDER). GS uploader ve Ohio Cloudlift'te ai/eps sırada duruyor.
 - Make'te saatlik senaryo kalıcı (10203711; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.
