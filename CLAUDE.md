@@ -124,6 +124,11 @@ permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sa
   5 sitede (FastDTF, Chili, DTF Nash, Ohio, Legend) test ai/eps aynı şekilde takıldı → uygulama (dripapps) tarafı. Gerçek EPS
   örneği yok (klasörde sadece ai). Kullanıcı ekibe/dripapps'e iletecek; düzelene kadar ai/eps builder sırasında yok (`saatlik.js`
   BUILDER), düzelince geri eklenecek. GS uploader ve Ohio Cloudlift'te ai/eps sırada.
+- **Dosya türü kapsamı (`kapsam.js`, 23 Kasım):** saatlik test her turda "site/ürün/tür → geçti mi, ne zaman" bilgisini
+  `results/state.json` içinde `_kapsam` anahtarına yazar (uyarı durumuyla aynı cache; ayrı dosya yok, cache yolu değişmesin diye).
+  Haftalık genel test mailine ve Excel'ine (sayfa "Dosya türleri") ürün × tür tablosu ekler: ✅ geçti, ❌ takıldı (adım), ⏳ sırası
+  henüz gelmedi, ⚠️ bilinen sorun (`saatlik.js` BILINEN_SORUN, sırada yok), – kabul etmiyor. 234 kombinasyon en geç ~3 günde
+  bir tur tamamlanır (FastDTF/Legend 64 saat, Eagle 56, Ohio 36, Arizona 24, diğerleri 8–12).
 - Make'te saatlik senaryo kalıcı (10203711; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.

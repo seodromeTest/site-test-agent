@@ -33,6 +33,9 @@ async function build(run) {
   }
   oz.columns = [{ width: 26 }, { width: 9 }, { width: 10 }, { width: 8 }, { width: 13 }, { width: 110 }];
 
+  // Saatlik testin dosya türü kapsamı (ürün × tür)
+  if (run.kapsam) require('./kapsam').excelSayfasi(wb, run.kapsam);
+
   const used = new Set();
   for (const s of run.sites) {
     let name = s.domain.replace(/\.(com|net|us|co)$/, '').slice(0, 31);

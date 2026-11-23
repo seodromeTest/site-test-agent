@@ -56,8 +56,17 @@ const formatlar = {
   'chilitransfers.com/uv-dtf-gang-sheet-builder': ['png', 'jpg', 'svg', 'pdf'],
 };
 
+// Uygulamanın kabul ettiğini söylediği ama bilinen bir sorun yüzünden sırada olmayan türler (haftalık kapsam tablosunda ⚠️)
+const BILINEN_SORUN = {
+  'Build a Gang Sheet': {
+    ai: 'builder AI dosyasını kabul ettiğini söylüyor ama seçilince hiçbir şey yapmıyor (yükleme isteği yok, hata mesajı yok); gerçek Illustrator dosyasıyla doğrulandı (23 Kasım)',
+    eps: 'test EPS dosyası AI ile aynı şekilde takıldı (23 Kasım); gerçek EPS örneğiyle denenmedi',
+  },
+};
+
 module.exports = {
   FORMAT_SIRASI,
+  BILINEN_SORUN,
   formatlar,
   haric: [],
   upload: [

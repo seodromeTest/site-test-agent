@@ -144,6 +144,8 @@ function build(run) {
 
   ${[...badSites, ...run.sites.filter(s => s.ok)].map(siteDetail).join('')}
 
+  ${isFull && run.kapsam ? require('./kapsam').html(run.kapsam) : ''}
+
   <p style="font-size:12px;color:${C.muted};margin-top:24px;border-top:1px solid ${C.line};padding-top:10px">
   ${isFull ? '<b>Ana fonksiyonlar:</b> ana sayfa, arama, ürün sayfası, Add to cart, sepet sayfası ve Checkout (ödeme sayfası açılıyor, sipariş özeti görünüyor).' : '<b>Saatlik kontrol:</b> her sitede ana sayfa; upload listesindeki sitelerde her saat sıradaki upload ürünü yüklenip sepete eklenir ve checkout açılır, diğer sitelerde normal bir ürünle Add to cart, sepet ve checkout denenir.'}
   <b>Upload akışları:</b> test görseli yüklenir, sepete eklenir, sepette dosya linkinin oluştuğu ve açıldığı doğrulanır.
