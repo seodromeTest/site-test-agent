@@ -37,7 +37,7 @@ function alertState(sites, prev, startedAt) {
   const newFailures = [], recovered = [], ongoing = [];
   for (const s of sites) for (const f of s.flows) {
     const key = `${s.domain}/${f.id}`, p = old[key], lvl = severity(f);
-    const base = { site: s.domain, flow: f.title };
+    const base = { site: s.domain, flow: f.title, ...(f.file ? { dosya: f.file } : {}) };
     const bad = f.steps.find(x => !x.ok);
     if (lvl === 'engel') {
       if (p && p.level !== 'engel') continue; // önceden gerçek sorun vardı; bu tur bilinmiyor, durum aynen kalır

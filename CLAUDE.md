@@ -111,6 +111,12 @@ permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sa
 - Deneme için `--only <ürün-id,...>`: saatlik modda sıraya bakmadan o ürünler test edilir (`sites` ile birlikte: mailsiz).
 - Bu değişiklikle listedeki builder ve Cloudlift ürünleri haftalık genel testte de artık gerçekten test ediliyor
   (önce pageCheck). Legend'in eski adresi `dtf-transfer-custom-gang-sheet` açılmıyor → `glitter-dtf-transfer-custom-gang-sheet-upload`.
+- **Dosya türü sırası (23 Kasım):** her ürünün kabul ettiği türler `saatlik.js` `formatlar` (sayfadaki dosya alanı `accept` +
+  builder "Supported formats" taraması). Test dosyaları `fixtures/formatlar/{gangsheet 22"×24", builder 10"×10"}` — png, jpg,
+  webp (300 DPI EXIF'te), tif, psd 300 DPI; svg, pdf, ai (PDF uyumlu), eps vektör; üretici `fixtures/formatlar/uret.py`.
+  Saatlik testte ürünün her turunda SIRADAKİ tek tür yüklenir (tur no = saat no / sitedeki ürün sayısı; sıra
+  `FORMAT_SIRASI`). Arizona Cloudlift sadece PNG; Eagle builder svg almaz, Eagle GS uploader webp almaz; Chili builder psd
+  almaz; tif sadece Ohio Cloudlift. Uyarı mailinde test dosyasının adı yazar. `--format <uzantı>` deneme için türü zorlar.
 - Make'te saatlik senaryo kalıcı (10203711; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.

@@ -40,6 +40,7 @@ jobs:
             fixtures/genel
             fixtures/builder
             fixtures/gangsheet
+            fixtures/formatlar
 
       - uses: actions/setup-node@v4
         with:
