@@ -8,8 +8,8 @@
 // "Supported formats" yazısı). Saatlik testte ürünün her turunda bunlardan SIRADAKİ tek dosya yüklenir
 // (fixtures/formatlar/gangsheet|builder/, hepsi 300 DPI ya da vektör). Sıra: FORMAT_SIRASI.
 const FORMAT_SIRASI = ['png', 'jpg', 'pdf', 'svg', 'psd', 'ai', 'eps', 'webp', 'tif'];
-// Builder ai/eps de kabul ettiğini söylüyor ama 23 Kasım ilk turunda (5 sitede) test ai/eps dosyası seçilince builder hiçbir
-// şey yapmadı (yükleme isteği yok, hata mesajı yok). Gerçek Illustrator/EPS dosyasıyla doğrulanana kadar builder sırasında yok.
+// Builder ai/eps de kabul ettiğini söylüyor ama dosya seçilince hiçbir şey yapmıyor (yükleme isteği yok, hata mesajı yok).
+// 23 Kasım: firmanın gerçek Illustrator dosyasıyla da doğrulandı (CLAUDE.md "Builder + AI"). Uygulama düzelene kadar sırada yok.
 const BUILDER = ['png', 'jpg', 'svg', 'psd', 'pdf'];
 const BUILDER_WEBP = [...BUILDER, 'webp'];
 const GS_UPLOADER = ['png', 'jpg', 'svg', 'psd', 'ai', 'eps', 'pdf', 'webp'];
