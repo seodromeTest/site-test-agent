@@ -20,7 +20,7 @@ Saatler Berlin saatidir.
 |---|---|---|---|
 | Her pazartesi 05:30 | `full` (genel test, ~3 saat) | "Site testi – Haftalık genel test" | Her zaman, Excel ekli |
 | İstendiğinde | `full` | "Site testi – GitHub'da genel testi başlat (elle)" | Her zaman |
-| Saatlik | `hourly` (liste `saatlik.js`) | henüz kurulmadı | Sadece yeni sorun (ACİL / Uyarı) veya düzelme |
+| Her saat (pazartesi 05:00–09:00 hariç) | `hourly` (liste `saatlik.js`) | "Site testi – Saatlik kontrol" | Sadece yeni sorun (ACİL / Uyarı) veya düzelme |
 
 **Saatlik kontrol:** her sitede ana sayfa; `saatlik.js` listesinde ürünü olan sitelerde her saat sıradaki upload ürünü
 yüklenir → sepete eklenir → checkout açılır; diğer sitelerde normal bir ürünle Add to cart → sepet → checkout.
