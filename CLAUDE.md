@@ -19,9 +19,11 @@ Make senaryoları (team 1840541, saat dilimi Berlin):
 - 10116955 "Site testi – Haftalık genel test": **her pazartesi 05:30 Berlin**, mode=full. Aktif.
 - 10109223 "Site testi – GitHub'da genel testi başlat (elle)": on-demand, istenince hemen genel test.
 - 10051850 mail senaryosu. 10044058 eski Make-only link testi: kapalı, kullanılmıyor.
-- **10203711 "Site testi – Saatlik kontrol (deneme: Cmt 03:00 – Pzt 05:00 Berlin)"**: her saat (interval 3600), mode=hourly,
-  `between` 21 Kasım 03:00 – 23 Kasım 04:59 Berlin (ilk tur Cmt 03:00, son tur Pzt 04:00; 05:30 genel testle çakışmaz).
-  Aktif. Deneme bitince kullanıcıyla sonuca bakılıp kalıcı saatlik senaryoya çevrilecek (between kaldırılır).
+- **10203711 "Site testi – Saatlik kontrol (Pzt 05:00–09:00 hariç)"**: **kalıcı** (23 Kasım), her saat (interval 3600,
+  23 Kasım 09:40'tan beri her saatin :40'ında), mode=hourly. `restrict`: Pzt 05:00–09:00 çalışmaz (genel test 05:30, ~3 saat),
+  diğer tüm saatler açık. Deneme (21 Kas 03:00 – 23 Kas 04:00): 50/50 tur, 1.200/1.200 akış geçti, ort. 12,7 dk (en uzun
+  16,9), mail hiç gitmedi; FastDTF "UV DTF Gang Sheets" (GS uploader) Cmt ve Pzr 11:00'de ilk denemede yükleme 2 dk'yı
+  aştı, ikinci denemede geçti (izlenmeli). Make: tur başına 1 işlem (~730/ay).
 - Mail senaryosu 10051850 yolları: (1) sendEmail + ekran görüntüsü yok + Excel yok → düz mail (saatlik Uyarı/Düzeldi),
   (2) sendEmail + ekran görüntüsü → ekli mail (saatlik ACİL), (3) sendEmail + Excel → genel test raporu. `report.js`
   ekran görüntüsü yoksa `screenshot` alanını hiç göndermez.
@@ -80,7 +82,7 @@ Ayıklanan (raporda görünmez, `lib.js` NOISE/NOISE_JS): testin engellediği Ti
 `Failed to fetch`), Shopify piksel sandbox, Cloudflare Turnstile (`data:,` CSP, `%c%d font-size`), shop.app/google framing,
 permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sayfanın JS hatalarını da içeriyor ("JS hatası: …").
 
-## Saatlik kontrol (19 Kasım: kod hazır ve canlı denendi; Make senaryosu bekliyor)
+## Saatlik kontrol (23 Kasım'dan beri kalıcı; Make 10203711)
 - Liste `saatlik.js` (kullanıcının verdiği 40 URL, 9 site). gangsheet.com 19 Kasım'da kullanıcının isteğiyle testten tamamen çıkarıldı (haftalık ve saatlik).
 - Listede ürünü olan sitede her saat: ana sayfa (süre) + **sıradaki tek upload ürünü** (saat no % ürün sayısı):
   yükle → Add to cart → sepet doğrulama + baskı dosyası linki → sepet sayfası → **checkout** (ödeme sayfası açılıyor,
@@ -109,7 +111,7 @@ permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sa
 - Deneme için `--only <ürün-id,...>`: saatlik modda sıraya bakmadan o ürünler test edilir (`sites` ile birlikte: mailsiz).
 - Bu değişiklikle listedeki builder ve Cloudlift ürünleri haftalık genel testte de artık gerçekten test ediliyor
   (önce pageCheck). Legend'in eski adresi `dtf-transfer-custom-gang-sheet` açılmıyor → `glitter-dtf-transfer-custom-gang-sheet-upload`.
-- Make'te saatlik senaryo kuruldu (10203711, 21–23 Kasım deneme; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
+- Make'te saatlik senaryo kalıcı (10203711; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.
 
