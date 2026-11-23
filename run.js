@@ -410,6 +410,9 @@ async function testSite(browser, site, isFirstSite, prev) {
   // Önceki saatlerin uyarı durumu (saatlik test): hangi kontrol şu an sorunlu, ne zamandan beri, mail gitti mi
   let prev = {};
   try { prev = JSON.parse(fs.readFileSync(STATE, 'utf8')); } catch (e) {}
+  // Dosya türü kapsamı aynı dosyada (_kapsam): uyarı durumundan ayrı tutulur (kapsam.js)
+  const kapsam = prev._kapsam || {};
+  delete prev._kapsam;
 
   if (PLAN) {
     for (const name of SITES) {
@@ -471,10 +474,11 @@ async function testSite(browser, site, isFirstSite, prev) {
 
   // Saatlik test: önceki duruma göre yeni sorunlar (ACİL / Uyarı), düzelenler ve devam edenler
   const { now, newFailures, recovered, ongoing } = HOURLY ? alertState(sites, prev, startedAt) : { now: prev, newFailures: [], recovered: [], ongoing: [] };
-  if (HOURLY && !FAIL_DEMO && !ONLY && !arg('sites')) fs.writeFileSync(STATE, JSON.stringify(now, null, 1));
+  if (HOURLY) require('./kapsam').kaydet(kapsam, sites, startedAt);
+  if (HOURLY && !FAIL_DEMO && !ONLY && !arg('sites')) fs.writeFileSync(STATE, JSON.stringify({ ...now, _kapsam: kapsam }, null, 1));
 
   const run = {
-    mode: MODE, startedAt, ms: Date.now() - t0, demo: FAIL_DEMO, sites,
+    mode: MODE, startedAt, ms: Date.now() - t0, demo: FAIL_DEMO, sites, ...(MODE === 'full' ? { kapsam } : {}),
     ok: sites.every(s => s.ok),
     critical: sites.some(s => s.flows.some(f => !f.ok)),
     alert: { newFailures, recovered, ongoing },

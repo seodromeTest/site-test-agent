@@ -126,6 +126,23 @@ async function deneme(ad, fn) {
     const r = build({ mode: 'hourly', startedAt: '2026-11-23T10:00:00Z', ms: 1, sites: [], ok: false, alert: { newFailures: [{ site: 'a.com', flow: 'Y (Build a Gang Sheet)', level: 'uyari', dosya: 'builder_10x10in_300dpi.pdf', step: 'Upload' }], recovered: [], ongoing: [] } });
     assert.match(r.html, /test dosyası: builder_10x10in_300dpi\.pdf/);
   });
+  await deneme('Kapsam: saatlik sonuç ürün × türe yazılır; tabloda geçti/takıldı/bekliyor/bilinen/kabul etmiyor (23 Kasım)', () => {
+    const K = require('./kapsam');
+    const t = '2026-11-23T11:40:00Z';
+    const k = K.kaydet({}, [{ domain: 'dtfprintdepot.com', flows: [
+      { id: 'anasayfa', ok: true, steps: [] },
+      { id: 'uv-dtf-gang-sheet', file: 'builder_10x10in_300dpi.psd', ok: true, steps: [{ name: 'Upload', ok: true }] },
+      { id: 'gang-sheet-builder-1', file: 'builder_10x10in_300dpi.pdf', ok: false, steps: [{ name: 'Upload', ok: false, error: 'zaman aşımı' }] }] }], t);
+    assert.deepEqual(Object.keys(k), ['dtfprintdepot.com/uv-dtf-gang-sheet', 'dtfprintdepot.com/gang-sheet-builder-1']);
+    const satir = id => K.tablo(k).find(r => r.url.includes('dtfprintdepot.com/products/' + id)).hucreler;
+    assert.equal(satir('uv-dtf-gang-sheet').psd.durum, 'ok');
+    assert.equal(satir('gang-sheet-builder-1').pdf.durum, 'hata');
+    assert.equal(satir('uv-dtf-gang-sheet').png.durum, 'bekliyor');
+    assert.equal(satir('uv-dtf-gang-sheet').ai.durum, 'bilinen');   // builder AI: bilinen sorun
+    assert.equal(satir('uv-dtf-gang-sheet').webp.durum, 'yok');     // Print Depot builder webp kabul etmiyor
+    const toplam = K.tablo({}).reduce((n, r) => n + Object.values(r.hucreler).filter(h => h.durum === 'bekliyor').length, 0);
+    assert.equal(toplam, Object.values(SAATLIK.formatlar).reduce((n, v) => n + v.length, 0));
+  });
   const flow = (steps, extra = {}) => ({ ok: !steps.some(s => !s.ok), steps, title: 'X', id: 'x', ...extra });
   const ok = n => ({ name: n, ok: true }), bad = (n, error = 'hata') => ({ name: n, ok: false, error });
   await deneme('Seviye: sepete ekleme / sepet / checkout / ana sayfa → ACİL', () => {
