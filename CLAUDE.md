@@ -19,8 +19,8 @@ Make senaryoları (team 1840541, saat dilimi Berlin):
 - 10116955 "Site testi – Haftalık genel test": **her pazartesi 05:30 Berlin**, mode=full. Aktif.
 - 10109223 "Site testi – GitHub'da genel testi başlat (elle)": on-demand, istenince hemen genel test.
 - 10051850 mail senaryosu. 10044058 eski Make-only link testi: kapalı, kullanılmıyor.
-- **10203711 "Site testi – Saatlik kontrol (Pzt 05:00–09:00 hariç)"**: **kalıcı** (23 Kasım), her saat (interval 3600,
-  23 Kasım 09:40'tan beri her saatin :40'ında), mode=hourly. `restrict`: Pzt 05:00–09:00 çalışmaz (genel test 05:30, ~3 saat),
+- **10203711 "Site testi – Saatlik kontrol (Pzt 05:00–09:00 hariç)"**: **kalıcı** (23 Kasım), her saat başı (interval 3600,
+  `between` 23 Kasım 15:00 – 2030 sonu; ilk tur 23 Kasım 15:00), mode=hourly. `restrict`: Pzt 05:00–09:00 çalışmaz (genel test 05:30, ~3 saat),
   diğer tüm saatler açık. Deneme (21 Kas 03:00 – 23 Kas 04:00): 50/50 tur, 1.200/1.200 akış geçti, ort. 12,7 dk (en uzun
   16,9), mail hiç gitmedi; FastDTF "UV DTF Gang Sheets" (GS uploader) Cmt ve Pzr 11:00'de ilk denemede yükleme 2 dk'yı
   aştı, ikinci denemede geçti (izlenmeli). Make: tur başına 1 işlem (~730/ay).
@@ -129,6 +129,10 @@ permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sa
   Haftalık genel test mailine ve Excel'ine (sayfa "Dosya türleri") ürün × tür tablosu ekler: ✅ geçti, ❌ takıldı (adım), ⏳ sırası
   henüz gelmedi, ⚠️ bilinen sorun (`saatlik.js` BILINEN_SORUN, sırada yok), – kabul etmiyor. 234 kombinasyon en geç ~3 günde
   bir tur tamamlanır (FastDTF/Legend 64 saat, Eagle 56, Ohio 36, Arizona 24, diğerleri 8–12).
+- **Çapraz kontrol Excel'i (kullanıcı isteği, 23 Kasım):** kapsam turu (`_kapsam._tur.basla` = bu özellikten sonraki ilk saatlik
+  tur) içinde her ürünün sıradaki her türü en az bir kez denenince saatlik tur bir kez "📄 Çapraz dosya türü kontrolü tamamlandı"
+  maili gönderir: Excel'de SADECE hatalı kombinasyonlar (takılanlar + bilinen sorunlar; site, ürün, tür, adım). `_tur.mail` ile
+  bir kez. Ara hatalar her zamanki Uyarı mailleriyle. Kullanıcı saatlik sonuçların sohbette paylaşılmasını istemiyor (sorarsa).
 - Make'te saatlik senaryo kalıcı (10203711; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.
