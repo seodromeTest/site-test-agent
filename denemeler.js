@@ -104,6 +104,28 @@ async function deneme(ad, fn) {
     // gangsheet.com 19 Kasım'da kullanıcının isteğiyle testten tamamen çıkarıldı
     assert.ok(!sites.some(x => x.domain === 'gangsheet.com'), 'gangsheet.com testte olmamalı');
   });
+  await deneme('Dosya türleri: saatlik listedeki her ürünün kabul ettiği türler tanımlı, her tür için 300 DPI/vektör dosya var (23 Kasım)', () => {
+    for (const u of SAATLIK.upload) {
+      const url = new URL(u), key = url.hostname.replace(/^www\./, '') + '/' + url.pathname.split('/products/')[1];
+      const kabul = SAATLIK.formatlar[key];
+      assert.ok(kabul && kabul.length, `formatlar yok: ${key}`);
+      for (const ext of kabul) {
+        assert.ok(SAATLIK.FORMAT_SIRASI.includes(ext), `${key}: bilinmeyen tür ${ext}`);
+        for (const d of ['gangsheet', 'builder'])
+          assert.ok(fs.readdirSync(`${__dirname}/fixtures/formatlar/${d}`).some(f => f.endsWith('.' + ext)), `fixtures/formatlar/${d}: ${ext} yok`);
+      }
+    }
+  });
+  await deneme('Dosya türleri: Arizona Cloudlift sadece PNG; Eagle builder SVG almaz; Chili builder PSD almaz', () => {
+    assert.deepEqual(SAATLIK.formatlar['dtftransferarizona.com/dtf-gang-sheet'], ['png']);
+    assert.ok(!SAATLIK.formatlar['eagledtfprint.com/build-dtf-gang-sheet'].includes('svg'));
+    assert.ok(!SAATLIK.formatlar['chilitransfers.com/dtf-gang-sheet-builder'].includes('psd'));
+  });
+  await deneme('Mail: uyarıda test dosyası adı görünür', () => {
+    const { build } = require('./report');
+    const r = build({ mode: 'hourly', startedAt: '2026-11-23T10:00:00Z', ms: 1, sites: [], ok: false, alert: { newFailures: [{ site: 'a.com', flow: 'Y (Build a Gang Sheet)', level: 'uyari', dosya: 'builder_10x10in_300dpi.pdf', step: 'Upload' }], recovered: [], ongoing: [] } });
+    assert.match(r.html, /test dosyası: builder_10x10in_300dpi\.pdf/);
+  });
   const flow = (steps, extra = {}) => ({ ok: !steps.some(s => !s.ok), steps, title: 'X', id: 'x', ...extra });
   const ok = n => ({ name: n, ok: true }), bad = (n, error = 'hata') => ({ name: n, ok: false, error });
   await deneme('Seviye: sepete ekleme / sepet / checkout / ana sayfa → ACİL', () => {

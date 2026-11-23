@@ -157,7 +157,7 @@ function coreFlow(site, { search = true } = {}) {
 
 async function runFlow(browser, site, flow, demoBreak) {
   const { ctx, page, jsErrors, log } = await newPage(browser);
-  const file = nextFixture(flow.fixture);
+  const file = flow.fixtureFile || nextFixture(flow.fixture);
   const result = { id: flow.id, title: flow.title, app: flow.appName, url: flow.url, ok: true, steps: [], notes: [], ...(flow.noSearch ? { noSearch: true } : {}) };
   const t0 = Date.now();
   // Adımlar kesinlikle sıralı: bir adım (ve sayfanın o adımda başlattığı istekler) bitmeden sonraki başlamaz.
@@ -323,15 +323,32 @@ const hourlyRest = (min, max) => HOURLY && !process.env.NO_PACE ? new Promise(r 
 // Saatlik testte başarısız akış 2 dk sonra tekrar denenir (geçici aksaklık ACİL mail sayılmasın)
 const retryWait = r => HOURLY && !process.env.NO_PACE ? 120 : PACE ? (r.botBlock ? 120 : 45) : (r.botBlock ? 60 : 0);
 
+// Saatlik testte ürünün bu turda yükleyeceği dosya: ürünün kabul ettiği türlerden (saatlik.js formatlar) SIRADAKİ.
+// Ürün sitede n ürün arasında n saatte bir sıraya girer; o ürünün kaçıncı turu = saat no / n. Her turda bir sonraki tür.
+// --format <uzantı> ile deneme için tür zorlanabilir (ürün o türü kabul etmiyorsa sıradaki kullanılır).
+let formatTurn = 1;
+function formatFile(site, flow, id) {
+  const host = new URL(site.base).hostname.replace(/^www\./, '');
+  const kabul = SAATLIK.formatlar[`${host}/${id}`];
+  if (!kabul) throw new Error(`saatlik.js: ${host}/${id} için kabul edilen dosya türleri (formatlar) yok`);
+  const dir = path.join(__dirname, 'fixtures', 'formatlar', flow.fixture === 'builder' ? 'builder' : 'gangsheet');
+  const files = SAATLIK.FORMAT_SIRASI.filter(ext => kabul.includes(ext))
+    .map(ext => fs.readdirSync(dir).find(f => f.endsWith('.' + ext))).filter(Boolean);
+  if (!files.length) throw new Error(`fixtures/formatlar: ${host}/${id} için dosya yok`);
+  const zorla = arg('format') && files.find(f => f.endsWith('.' + arg('format')));
+  return path.join(dir, zorla || files[formatTurn % files.length]);
+}
+
 // Saatlik testte bu sitede test edilecek akışlar (saatlik.js). prev: önceki saatlerin uyarı durumu.
 function hourlyFlows(site, prev = {}) {
   const host = new URL(site.base).hostname.replace(/^www\./, '');
+  formatTurn = Math.floor(HOUR / Math.max(1, SAATLIK.upload.filter(u => new URL(u).hostname.replace(/^www\./, '') === host).length));
   const list = SAATLIK.upload.filter(u => new URL(u).hostname.replace(/^www\./, '') === host).map(u => {
     const id = new URL(u).pathname.split('/products/')[1].replace(/\/$/, '');
     const flow = site.flows.find(f => f.id === id);
     if (!flow) throw new Error(`saatlik.js: ${site.domain} sitesinde "${id}" ürünü sites/ dosyasında tanımlı değil`);
     if (flow.noCart) throw new Error(`saatlik.js: ${site.domain} "${id}" ürününün uygulaması henüz testte değil (pageCheck)`);
-    return { ...flow, url: u }; // adres saatlik listedeki gibi (varyantlı olabilir)
+    return { ...flow, url: u, fixtureFile: formatFile(site, flow, id) }; // adres saatlik listedeki gibi (varyantlı olabilir)
   });
   if (!list.length) return [coreFlow(site, { search: false })];
   // Deneme: --only verilmişse sıraya bakılmaz, listedeki o ürünler test edilir (ör. --only anasayfa,dtf-gang-sheet)
@@ -398,7 +415,7 @@ async function testSite(browser, site, isFirstSite, prev) {
     for (const name of SITES) {
       const site = require(`./sites/${name}`);
       const fl = HOURLY ? hourlyFlows(site, prev) : [coreFlow(site), ...site.flows];
-      console.log(`${site.domain}: ${fl.map(f => f.direct ? f.title : `${f.title} → ${f.url}`).join(' | ')}`);
+      console.log(`${site.domain}: ${fl.map(f => f.direct ? f.title : `${f.title} → ${f.url}${f.fixtureFile ? ` [${path.basename(f.fixtureFile)}]` : ''}`).join(' | ')}`);
     }
     return;
   }

@@ -112,12 +112,12 @@ function build(run) {
   ${run.demo ? `<div style="background:#fff8c5;border:1px solid #d4a72c;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-weight:600">🧪 Bu bir TEST uyarısıdır. Uyarı sistemini denemek için bir ürün bilerek var olmayan bir adrese yönlendirildi. Sitede gerçek bir sorun yok.</div>` : ''}
   ${acil.length ? `<div style="background:#ffebe9;border:1px solid #ff8182;border-radius:8px;padding:14px 16px;margin-bottom:16px">
     <div style="font-size:18px;font-weight:700;color:${C.bad}">🚨 ACİL – müşteri sipariş veremiyor olabilir</div>
-    ${li(acil.map(x => `<li><b>${esc(x.site)}</b> – ${esc(x.flow)}${x.step ? `<br><span style="font-size:12px">Takıldığı adım: ${esc(x.step)}${x.error ? ` – ${esc(x.error)}` : ''}</span>` : ''}</li>`))}
+    ${li(acil.map(x => `<li><b>${esc(x.site)}</b> – ${esc(x.flow)}${x.dosya ? ` <span style="font-size:12px">(test dosyası: ${esc(x.dosya)})</span>` : ''}${x.step ? `<br><span style="font-size:12px">Takıldığı adım: ${esc(x.step)}${x.error ? ` – ${esc(x.error)}` : ''}</span>` : ''}</li>`))}
     <div style="font-size:12px;color:${C.muted};margin-top:8px">Test 2 dk arayla iki kez denedi, ikisinde de başarısız oldu. Hata ekran görüntüsü ekte. Sorun devam ettiği sürece tekrar mail gelmez; düzelince "Düzeldi" maili gelir.</div>
   </div>` : ''}
   ${uyari.length ? `<div style="background:#fff8c5;border:1px solid #d4a72c;border-radius:8px;padding:14px 16px;margin-bottom:16px">
     <div style="font-size:18px;font-weight:700;color:${C.warn}">⚠️ Uyarı – site çalışıyor, bir parçası sorunlu</div>
-    ${li(uyari.map(x => `<li><b>${esc(x.site)}</b> – ${esc(x.flow)}${x.step ? `<br><span style="font-size:12px">Takıldığı adım: ${esc(x.step)}${x.error ? ` – ${esc(x.error)}` : ''}</span>` : ''}</li>`))}
+    ${li(uyari.map(x => `<li><b>${esc(x.site)}</b> – ${esc(x.flow)}${x.dosya ? ` <span style="font-size:12px">(test dosyası: ${esc(x.dosya)})</span>` : ''}${x.step ? `<br><span style="font-size:12px">Takıldığı adım: ${esc(x.step)}${x.error ? ` – ${esc(x.error)}` : ''}</span>` : ''}</li>`))}
     <div style="font-size:12px;color:${C.muted};margin-top:8px">Upload aracı (yükleme / builder) çalışmıyor ya da ana sayfa çok yavaş. Sorun sürdükçe tekrar mail gelmez; düzelince "Düzeldi" maili gelir.</div>
   </div>` : ''}
   ${engel.length ? `<div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:8px;padding:14px 16px;margin-bottom:16px">
