@@ -474,8 +474,17 @@ async function testSite(browser, site, isFirstSite, prev) {
 
   // Saatlik test: önceki duruma göre yeni sorunlar (ACİL / Uyarı), düzelenler ve devam edenler
   const { now, newFailures, recovered, ongoing } = HOURLY ? alertState(sites, prev, startedAt) : { now: prev, newFailures: [], recovered: [], ongoing: [] };
-  if (HOURLY) require('./kapsam').kaydet(kapsam, sites, startedAt);
-  if (HOURLY && !FAIL_DEMO && !ONLY && !arg('sites')) fs.writeFileSync(STATE, JSON.stringify({ ...now, _kapsam: kapsam }, null, 1));
+  const K = require('./kapsam');
+  const gercekTur = HOURLY && !FAIL_DEMO && !ONLY && !arg('sites');
+  if (HOURLY) K.kaydet(kapsam, sites, startedAt);
+  // Çapraz kontrol: her ürün × tür en az bir kez denendiyse hatalıların Excel'i bir kez mail olarak gider
+  let capraz = null;
+  if (gercekTur && K.tamamlandi(kapsam) && !kapsam._tur.mail) {
+    capraz = await K.caprazRapor(kapsam, new Date().toISOString());
+    fs.writeFileSync(path.join(OUT, capraz.excelName), Buffer.from(capraz.excel, 'base64'));
+    console.log(`Çapraz kontrol tamamlandı: ${capraz.subject}`);
+  } else if (HOURLY) console.log(`Çapraz kontrol: ${K.eksikler(kapsam).length} kombinasyon henüz denenmedi`);
+  if (gercekTur) fs.writeFileSync(STATE, JSON.stringify({ ...now, _kapsam: kapsam }, null, 1));
 
   const run = {
     mode: MODE, startedAt, ms: Date.now() - t0, demo: FAIL_DEMO, sites, ...(MODE === 'full' ? { kapsam } : {}),
@@ -506,5 +515,11 @@ async function testSite(browser, site, isFirstSite, prev) {
     const payload = { ...report, mode: MODE, ok: run.ok, critical: run.critical, startedAt, alert: run.alert, alertLevel: report.level };
     const r = await fetch(process.env.WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     console.log(`Make webhook: HTTP ${r.status}`);
+  }
+  // Çapraz kontrol maili (ayrı mail, Excel ekli → Make mail senaryosunun Excel yolu)
+  if (capraz && process.env.WEBHOOK_URL && !process.env.NO_MAIL) {
+    const r = await fetch(process.env.WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...capraz, mode: 'capraz', startedAt }) });
+    console.log(`Make webhook (çapraz kontrol): HTTP ${r.status}`);
+    if (r.ok) { kapsam._tur.mail = new Date().toISOString(); fs.writeFileSync(STATE, JSON.stringify({ ...now, _kapsam: kapsam }, null, 1)); }
   }
 })();

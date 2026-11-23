@@ -2,6 +2,8 @@
 // Kayıt results/state.json içinde `_kapsam` anahtarında tutulur (uyarı durumuyla aynı Actions cache'i, ayrı dosya yok).
 // Haftalık genel test bu kaydı okuyup mailde ve Excel'de "Dosya türleri" tablosu olarak gösterir.
 //   _kapsam["<site>/<ürün id>"]["<uzantı>"] = { ok, t (ISO), adim?, hata?, engel? }
+//   _kapsam._tur = { basla (ISO), mail? (ISO) } – çapraz kontrol turu: her ürün × tür en az bir kez denenince
+//   (basla'dan sonra) sadece hatalı kombinasyonların Excel'i bir kez mail olarak gider (kullanıcı isteği, 23 Kasım).
 const SAATLIK = require('./saatlik');
 
 const host = u => new URL(u).hostname.replace(/^www\./, '');
@@ -10,6 +12,7 @@ const ext = f => (f.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
 
 // Saatlik turun sonuçlarını kayda işle (sadece dosya yüklenen upload akışları)
 function kaydet(kapsam, sites, startedAt) {
+  kapsam._tur ||= { basla: startedAt };
   for (const s of sites) for (const f of s.flows) {
     if (!f.file || f.id === 'anasayfa' || f.id === 'core') continue;
     const e = ext(f.file);
@@ -102,4 +105,65 @@ function excelSayfasi(wb, kapsam) {
   return ws;
 }
 
-module.exports = { kaydet, tablo, ozet, hucre, html, excelSayfasi };
+// Çapraz kontrol turu bitti mi: saatlik listedeki her ürünün sırada olan her türü, tur başladıktan sonra en az bir kez denendi
+function eksikler(kapsam) {
+  const basla = kapsam._tur?.basla || '9999';
+  const out = [];
+  for (const u of SAATLIK.upload) {
+    const key = `${host(u)}/${urunId(u)}`;
+    for (const e of SAATLIK.formatlar[key] || []) if (!(kapsam[key]?.[e]?.t >= basla)) out.push(`${key} ${e}`);
+  }
+  return out;
+}
+const tamamlandi = kapsam => !!kapsam._tur && eksikler(kapsam).length === 0;
+
+// Hatalı kombinasyonlar: son denemede takılanlar + bilinen sorun yüzünden sırada olmayanlar (ör. builder AI/EPS)
+function hatalilar(kapsam) {
+  const out = [];
+  for (const r of tablo(kapsam)) for (const [e, h] of Object.entries(r.hucreler)) {
+    if (h.durum === 'hata' || h.durum === 'engel') out.push({ ...r, tur: e, durum: h.durum === 'hata' ? 'Takıldı' : 'Test edilemedi (bot koruması)', t: h.t, aciklama: h.not || '' });
+    else if (h.durum === 'bilinen') out.push({ ...r, tur: e, durum: 'Bilinen sorun (sırada yok)', t: '', aciklama: h.not || '' });
+  }
+  return out;
+}
+
+// Çapraz kontrol bitince gönderilen mail: sadece hatalı kombinasyonların Excel'i
+async function caprazRapor(kapsam, bitis) {
+  const ExcelJS = require('exceljs');
+  const rows = hatalilar(kapsam), o = ozet(tablo(kapsam));
+  const toplam = Object.values(SAATLIK.formatlar).reduce((n, v) => n + v.length, 0);
+  const wb = new ExcelJS.Workbook(); wb.creator = 'Site Test Agent';
+  const ws = wb.addWorksheet('Hatalı kombinasyonlar');
+  ws.addRow(['Çapraz dosya türü kontrolü – hatalı kombinasyonlar']).font = { bold: true, size: 14 };
+  ws.addRow([`${tarih(kapsam._tur.basla)} – ${tarih(bitis)} (Berlin) · ${toplam} ürün × tür kombinasyonu denendi · ${o.ok} geçti · ${o.hata} takıldı · ${o.bilinen} bilinen sorun`]);
+  ws.addRow([]);
+  const h = ws.addRow(['Site', 'Upload ürünü', 'Uygulama', 'Dosya türü', 'Sonuç', 'Son deneme', 'Açıklama (takıldığı adım / sebep)']);
+  h.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  h.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF24292F' } }; });
+  for (const r of rows) {
+    const row = ws.addRow([r.site, { text: r.urun, hyperlink: r.url }, r.uygulama, r.tur.toUpperCase(), r.durum, tarih(r.t), r.aciklama]);
+    row.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: r.durum === 'Takıldı' ? 'FFFFEBE9' : 'FFFFF8C5' } };
+    row.alignment = { vertical: 'top', wrapText: true };
+  }
+  if (!rows.length) ws.addRow(['Hatalı kombinasyon yok: her ürün kabul ettiği her türde geçti.']);
+  ws.columns = [{ width: 24 }, { width: 42 }, { width: 20 }, { width: 11 }, { width: 26 }, { width: 13 }, { width: 90 }];
+  ws.views = [{ state: 'frozen', ySplit: 4 }];
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 7 } };
+  const excel = Buffer.from(await wb.xlsx.writeBuffer());
+  const esc = x => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const takilan = rows.filter(r => r.durum !== 'Bilinen sorun (sırada yok)');
+  return {
+    kind: 'capraz', sendEmail: true,
+    subject: `📄 Çapraz dosya türü kontrolü tamamlandı – ${takilan.length ? `${takilan.length} hatalı kombinasyon` : 'hata yok'}${o.bilinen ? ` (+${o.bilinen} bilinen sorun)` : ''}`,
+    html: `<div style="font-family:Arial,sans-serif">
+      <h2>Çapraz dosya türü kontrolü tamamlandı</h2>
+      <p>${tarih(kapsam._tur.basla)} – ${tarih(bitis)} (Berlin) arasında saatlik testte ${toplam} ürün × dosya türü kombinasyonunun hepsi en az bir kez denendi.<br>
+      ✅ ${o.ok} geçti · ❌ ${o.hata} takıldı · ⚠️ ${o.bilinen} bilinen sorun (sırada yok).</p>
+      <p>Ekteki Excel'de sadece hatalı kombinasyonlar var (site, upload ürünü, dosya türü, takıldığı adım).</p>
+      ${takilan.length ? `<ul>${takilan.map(r => `<li><b>${esc(r.site)}</b> – ${esc(r.urun)} – <b>${r.tur.toUpperCase()}</b>: ${esc(r.aciklama)}</li>`).join('')}</ul>` : ''}
+    </div>`,
+    excelName: `capraz-kontrol-hatalilar-${bitis.slice(0, 10)}.xlsx`, excel: excel.toString('base64'),
+  };
+}
+
+module.exports = { kaydet, tablo, ozet, hucre, html, excelSayfasi, eksikler, tamamlandi, hatalilar, caprazRapor };

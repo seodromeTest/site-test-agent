@@ -133,7 +133,8 @@ async function deneme(ad, fn) {
       { id: 'anasayfa', ok: true, steps: [] },
       { id: 'uv-dtf-gang-sheet', file: 'builder_10x10in_300dpi.psd', ok: true, steps: [{ name: 'Upload', ok: true }] },
       { id: 'gang-sheet-builder-1', file: 'builder_10x10in_300dpi.pdf', ok: false, steps: [{ name: 'Upload', ok: false, error: 'zaman aşımı' }] }] }], t);
-    assert.deepEqual(Object.keys(k), ['dtfprintdepot.com/uv-dtf-gang-sheet', 'dtfprintdepot.com/gang-sheet-builder-1']);
+    assert.deepEqual(Object.keys(k).filter(x => x !== '_tur'), ['dtfprintdepot.com/uv-dtf-gang-sheet', 'dtfprintdepot.com/gang-sheet-builder-1']);
+    assert.equal(k._tur.basla, t);
     const satir = id => K.tablo(k).find(r => r.url.includes('dtfprintdepot.com/products/' + id)).hucreler;
     assert.equal(satir('uv-dtf-gang-sheet').psd.durum, 'ok');
     assert.equal(satir('gang-sheet-builder-1').pdf.durum, 'hata');
@@ -142,6 +143,29 @@ async function deneme(ad, fn) {
     assert.equal(satir('uv-dtf-gang-sheet').webp.durum, 'yok');     // Print Depot builder webp kabul etmiyor
     const toplam = K.tablo({}).reduce((n, r) => n + Object.values(r.hucreler).filter(h => h.durum === 'bekliyor').length, 0);
     assert.equal(toplam, Object.values(SAATLIK.formatlar).reduce((n, v) => n + v.length, 0));
+  });
+  await deneme('Çapraz kontrol: her ürün × tür denenmeden bitmiş sayılmaz; bitince sadece hatalılar Excel\'de (23 Kasım)', async () => {
+    const K = require('./kapsam');
+    const basla = '2026-11-23T14:00:00Z', sonra = '2026-11-24T10:00:00Z';
+    const k = { _tur: { basla } };
+    assert.ok(!K.tamamlandi(k));
+    // Her ürünün sıradaki her türünü "geçti" olarak doldur, birini takıldı yap
+    for (const u of SAATLIK.upload) {
+      const key = new URL(u).hostname.replace(/^www\./, '') + '/' + new URL(u).pathname.split('/products/')[1];
+      for (const e of SAATLIK.formatlar[key]) (k[key] ||= {})[e] = { ok: true, t: sonra };
+    }
+    k['eagledtfprint.com/dtf-gang-sheet-upload'].psd = { ok: false, t: sonra, adim: 'Upload', hata: 'Upload Complete görünmedi' };
+    assert.ok(K.tamamlandi(k));
+    // Tur başlamadan önceki denemeler sayılmaz
+    const eski = JSON.parse(JSON.stringify(k)); eski['chilitransfers.com/dtf-gang-sheet-builder'].png.t = '2026-11-23T13:00:00Z';
+    assert.ok(!K.tamamlandi(eski));
+    const h = K.hatalilar(k);
+    assert.ok(h.some(r => r.site === 'eagledtfprint.com' && r.tur === 'psd' && r.durum === 'Takıldı'));
+    assert.ok(h.every(r => r.durum !== 'Takıldı' || r.tur === 'psd'));
+    assert.ok(h.some(r => r.tur === 'ai' && /Bilinen/.test(r.durum))); // builder AI bilinen sorun da listede
+    const m = await K.caprazRapor(k, sonra);
+    assert.match(m.subject, /tamamlandı – 1 hatalı kombinasyon/);
+    assert.ok(m.sendEmail && m.excel && /\.xlsx$/.test(m.excelName));
   });
   const flow = (steps, extra = {}) => ({ ok: !steps.some(s => !s.ok), steps, title: 'X', id: 'x', ...extra });
   const ok = n => ({ name: n, ok: true }), bad = (n, error = 'hata') => ({ name: n, ok: false, error });
