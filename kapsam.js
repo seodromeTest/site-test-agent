@@ -2,6 +2,8 @@
 // Kayıt results/state.json içinde `_kapsam` anahtarında tutulur (uyarı durumuyla aynı Actions cache'i, ayrı dosya yok).
 // Haftalık genel test bu kaydı okuyup mailde ve Excel'de "Dosya türleri" tablosu olarak gösterir.
 //   _kapsam["<site>/<ürün id>"]["<uzantı>"] = { ok, t (ISO), adim?, hata?, engel? }
+//   _kapsam._turlar = [{ basla, durum: 'basladi'|'tamamlandi', bitis?, dk?, atlanan?, tekrar?, takilan? }] – test aşaması: her saatlik
+//   turun kendi durumu (süre aşımıyla kesilen, site atlanan, ikinci denemede geçen) çapraz kontrol Excel'inde raporlanır.
 //   _kapsam._tur = { basla (ISO), mail? (ISO) } – çapraz kontrol turu: her ürün × tür en az bir kez denenince
 //   (basla'dan sonra) sadece hatalı kombinasyonların Excel'i bir kez mail olarak gider (kullanıcı isteği, 23 Kasım).
 const SAATLIK = require('./saatlik');
@@ -105,6 +107,47 @@ function excelSayfasi(wb, kapsam) {
   return ws;
 }
 
+// Saatlik turun başı ve sonu (test aşaması raporu için)
+function turBasladi(kapsam, basla) {
+  (kapsam._turlar ||= []).push({ basla, durum: 'basladi' });
+  if (kapsam._turlar.length > 400) kapsam._turlar.splice(0, kapsam._turlar.length - 400);
+}
+function turBitti(kapsam, basla, sites, ms) {
+  const t = (kapsam._turlar ||= []).find(x => x.basla === basla) || (kapsam._turlar.push({ basla }), kapsam._turlar.at(-1));
+  const tekrar = [], takilan = [];
+  for (const s of sites) for (const f of s.flows) {
+    if (f.retried) tekrar.push({ site: s.domain, urun: f.title, dosya: f.file || '', ilk: `${f.firstAttempt?.step || ''}: ${(f.firstAttempt?.error || '').slice(0, 120)}${f.firstAttempt?.botBlock ? ` [${f.firstAttempt.botBlock}]` : ''}`, sonuc: f.ok ? 'ikinci denemede geçti' : 'ikinci denemede de takıldı' });
+    if (!f.ok) takilan.push(`${s.domain} – ${f.title}${f.file ? ` (${f.file})` : ''}`);
+  }
+  Object.assign(t, { durum: 'tamamlandi', bitis: new Date().toISOString(), dk: +(ms / 60000).toFixed(1),
+    atlanan: sites.filter(x => x.skipped).map(x => x.domain), tekrar, takilan });
+}
+
+// Turların özeti: tamamlanan, yarıda kesilen (başladı ama bitmedi), hiç başlamayan (beklenen saat başında kayıt yok)
+function turRaporu(kapsam, simdi = new Date().toISOString()) {
+  const basla = kapsam._tur?.basla || '0';
+  const turlar = (kapsam._turlar || []).filter(t => t.basla >= basla).sort((a, b) => a.basla.localeCompare(b.basla));
+  const satirlar = turlar.map((t, i) => ({ ...t, durumYazi: t.durum === 'tamamlandi'
+    ? (t.atlanan?.length ? `Tamamlandı ama ${t.atlanan.length} site süre yetmediği için atlandı` : 'Tamamlandı')
+    : (i === turlar.length - 1 && Date.parse(simdi) - Date.parse(t.basla) < 60 * 60000 ? 'Sürüyor' : 'Yarıda kesildi (55 dk süre sınırı ya da iptal)') }));
+  // Beklenen ama hiç başlamayan saatler (pazartesi 05–09 saatlik test yok)
+  const baslamayan = [];
+  for (let i = 1; i < turlar.length; i++) {
+    for (let t = Date.parse(turlar[i - 1].basla) + 60 * 60000; t < Date.parse(turlar[i].basla) - 30 * 60000; t += 60 * 60000) {
+      const d = new Date(t), gun = d.toLocaleDateString('en-US', { timeZone: 'Europe/Berlin', weekday: 'short' });
+      const saat = +d.toLocaleString('en-US', { timeZone: 'Europe/Berlin', hour: '2-digit', hour12: false });
+      if (!(gun === 'Mon' && saat >= 5 && saat < 9)) baslamayan.push(new Date(t).toISOString());
+    }
+  }
+  const say = f => satirlar.filter(f).length;
+  return { satirlar, baslamayan,
+    ozet: { toplam: satirlar.length, tamam: say(t => t.durum === 'tamamlandi' && !t.atlanan?.length), atlanan: say(t => t.atlanan?.length),
+      kesilen: say(t => /Yarıda/.test(t.durumYazi)), baslamayan: baslamayan.length,
+      tekrar: satirlar.reduce((n, t) => n + (t.tekrar?.length || 0), 0),
+      ortDk: (() => { const d = satirlar.filter(t => t.dk); return d.length ? +(d.reduce((n, t) => n + t.dk, 0) / d.length).toFixed(1) : 0; })(),
+      enUzunDk: Math.max(0, ...satirlar.map(t => t.dk || 0)) } };
+}
+
 // Çapraz kontrol turu bitti mi: saatlik listedeki her ürünün sırada olan her türü, tur başladıktan sonra en az bir kez denendi
 function eksikler(kapsam) {
   const basla = kapsam._tur?.basla || '9999';
@@ -149,6 +192,37 @@ async function caprazRapor(kapsam, bitis) {
   ws.columns = [{ width: 24 }, { width: 42 }, { width: 20 }, { width: 11 }, { width: 26 }, { width: 13 }, { width: 90 }];
   ws.views = [{ state: 'frozen', ySplit: 4 }];
   ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 7 } };
+  // Test aşaması: turların kendi durumu
+  const tr = turRaporu(kapsam, bitis);
+  const head = (sh, cols) => { const r = sh.addRow(cols); r.font = { bold: true, color: { argb: 'FFFFFFFF' } }; r.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF24292F' } }; }); };
+  const wt = wb.addWorksheet('Turlar');
+  wt.addRow(['Saatlik turlar (test aşaması)']).font = { bold: true, size: 14 };
+  wt.addRow([`${tr.ozet.toplam} tur · ${tr.ozet.tamam} sorunsuz tamamlandı · ${tr.ozet.kesilen} yarıda kesildi · ${tr.ozet.atlanan} turda site atlandı · ${tr.ozet.baslamayan} saat tur hiç başlamadı · ortalama ${tr.ozet.ortDk} dk, en uzun ${tr.ozet.enUzunDk} dk · ${tr.ozet.tekrar} tekrar deneme`]);
+  wt.addRow([]);
+  head(wt, ['Başlangıç', 'Durum', 'Süre (dk)', 'Atlanan siteler', 'Takılan (iki denemede de)', 'Tekrar deneme']);
+  const KES = { 'Tamamlandı': 'FFDAFBE1', 'Sürüyor': 'FFF6F8FA' };
+  for (const t of tr.satirlar) {
+    const r = wt.addRow([tarih(t.basla), t.durumYazi, t.dk ?? '', (t.atlanan || []).join(', '), (t.takilan || []).join('\n'), t.tekrar?.length || 0]);
+    r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KES[t.durumYazi] || 'FFFFEBE9' } };
+    r.alignment = { vertical: 'top', wrapText: true };
+  }
+  for (const b of tr.baslamayan) {
+    const r = wt.addRow([tarih(b), 'Tur hiç başlamadı (sıraya girip iptal edildi ya da Make başlatmadı)', '', '', '', '']);
+    r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF8C5' } };
+  }
+  wt.columns = [{ width: 14 }, { width: 46 }, { width: 10 }, { width: 30 }, { width: 70 }, { width: 13 }];
+  wt.views = [{ state: 'frozen', ySplit: 4 }];
+  const wr = wb.addWorksheet('Tekrar denemeler');
+  wr.addRow(['İlk denemede takılıp 2 dk sonra tekrar denenenler']).font = { bold: true, size: 14 };
+  wr.addRow([]);
+  head(wr, ['Tur', 'Site', 'Ürün', 'Test dosyası', 'İlk denemede', 'Sonuç']);
+  for (const t of tr.satirlar) for (const x of t.tekrar || []) {
+    const r = wr.addRow([tarih(t.basla), x.site, x.urun, x.dosya, x.ilk, x.sonuc]);
+    r.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: /geçti/.test(x.sonuc) ? 'FFFFF8C5' : 'FFFFEBE9' } };
+    r.alignment = { vertical: 'top', wrapText: true };
+  }
+  wr.columns = [{ width: 14 }, { width: 24 }, { width: 44 }, { width: 30 }, { width: 70 }, { width: 24 }];
+  wr.views = [{ state: 'frozen', ySplit: 3 }];
   const excel = Buffer.from(await wb.xlsx.writeBuffer());
   const esc = x => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const takilan = rows.filter(r => r.durum !== 'Bilinen sorun (sırada yok)');
@@ -159,11 +233,12 @@ async function caprazRapor(kapsam, bitis) {
       <h2>Çapraz dosya türü kontrolü tamamlandı</h2>
       <p>${tarih(kapsam._tur.basla)} – ${tarih(bitis)} (Berlin) arasında saatlik testte ${toplam} ürün × dosya türü kombinasyonunun hepsi en az bir kez denendi.<br>
       ✅ ${o.ok} geçti · ❌ ${o.hata} takıldı · ⚠️ ${o.bilinen} bilinen sorun (sırada yok).</p>
-      <p>Ekteki Excel'de sadece hatalı kombinasyonlar var (site, upload ürünü, dosya türü, takıldığı adım).</p>
+      <p><b>Turlar (test aşaması):</b> ${tr.ozet.toplam} tur · ${tr.ozet.tamam} sorunsuz tamamlandı · <b>${tr.ozet.kesilen} yarıda kesildi</b> (süre sınırı) · ${tr.ozet.atlanan} turda site atlandı · ${tr.ozet.baslamayan} saat tur hiç başlamadı · ortalama ${tr.ozet.ortDk} dk, en uzun ${tr.ozet.enUzunDk} dk · ${tr.ozet.tekrar} tekrar deneme.</p>
+      <p>Ekteki Excel: "Hatalı kombinasyonlar" (site, upload ürünü, dosya türü, takıldığı adım), "Turlar" (her saatlik turun süresi ve durumu), "Tekrar denemeler" (ilk denemede takılanlar).</p>
       ${takilan.length ? `<ul>${takilan.map(r => `<li><b>${esc(r.site)}</b> – ${esc(r.urun)} – <b>${r.tur.toUpperCase()}</b>: ${esc(r.aciklama)}</li>`).join('')}</ul>` : ''}
     </div>`,
     excelName: `capraz-kontrol-hatalilar-${bitis.slice(0, 10)}.xlsx`, excel: excel.toString('base64'),
   };
 }
 
-module.exports = { kaydet, tablo, ozet, hucre, html, excelSayfasi, eksikler, tamamlandi, hatalilar, caprazRapor };
+module.exports = { kaydet, tablo, ozet, hucre, html, excelSayfasi, eksikler, tamamlandi, hatalilar, caprazRapor, turBasladi, turBitti, turRaporu };

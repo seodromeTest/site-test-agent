@@ -167,6 +167,30 @@ async function deneme(ad, fn) {
     assert.match(m.subject, /tamamlandı – 1 hatalı kombinasyon/);
     assert.ok(m.sendEmail && m.excel && /\.xlsx$/.test(m.excelName));
   });
+  await deneme('Tur raporu: tamamlanan, yarıda kesilen, site atlanan, hiç başlamayan turlar ve tekrar denemeler (24 Kasım)', async () => {
+    const K = require('./kapsam');
+    const k = { _tur: { basla: '2026-11-24T10:00:00Z' } };
+    const site = (extra = {}) => [{ domain: 'a.com', flows: [{ id: 'x', title: 'X', file: 'gangsheet_22x24in_300dpi.jpg', ok: true, retried: true, firstAttempt: { step: 'Upload', error: 'zaman aşımı' }, steps: [] }], ...extra }];
+    K.turBasladi(k, '2026-11-24T10:00:30Z'); K.turBitti(k, '2026-11-24T10:00:30Z', site(), 13 * 60000);
+    K.turBasladi(k, '2026-11-24T11:00:30Z');                                                        // kesildi: bitmedi
+    K.turBasladi(k, '2026-11-24T14:00:30Z'); K.turBitti(k, '2026-11-24T14:00:30Z', [...site(), { domain: 'b.com', flows: [], skipped: true }], 44 * 60000);
+    const r = K.turRaporu(k, '2026-11-24T16:00:00Z');
+    assert.equal(r.ozet.toplam, 3); assert.equal(r.ozet.kesilen, 1); assert.equal(r.ozet.atlanan, 1); assert.equal(r.ozet.tamam, 1);
+    assert.equal(r.ozet.baslamayan, 2);  // 12:00 ve 13:00 hiç başlamadı
+    assert.equal(r.ozet.tekrar, 2);
+    // Pazartesi 05–09 arası boşluk "başlamadı" sayılmaz
+    const p = { _tur: { basla: '2026-11-30T00:00:00Z' } };
+    K.turBasladi(p, '2026-11-30T03:00:20Z'); K.turBitti(p, '2026-11-30T03:00:20Z', [], 1);   // Pzt 04:00 Berlin
+    K.turBasladi(p, '2026-11-30T08:00:20Z'); K.turBitti(p, '2026-11-30T08:00:20Z', [], 1);   // Pzt 09:00 Berlin
+    assert.equal(K.turRaporu(p, '2026-11-30T09:00:00Z').ozet.baslamayan, 0);
+    // Excel'de Turlar ve Tekrar denemeler sayfaları
+    const ExcelJS = require('exceljs');
+    for (const u of SAATLIK.upload) { const key = new URL(u).hostname.replace(/^www\./, '') + '/' + new URL(u).pathname.split('/products/')[1]; for (const e of SAATLIK.formatlar[key]) (k[key] ||= {})[e] = { ok: true, t: '2026-11-24T15:00:00Z' }; }
+    const m = await K.caprazRapor(k, '2026-11-24T16:00:00Z');
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(m.excel, 'base64'));
+    assert.deepEqual(wb.worksheets.map(w => w.name), ['Hatalı kombinasyonlar', 'Turlar', 'Tekrar denemeler']);
+    assert.match(m.html, /1 yarıda kesildi/);
+  });
   const flow = (steps, extra = {}) => ({ ok: !steps.some(s => !s.ok), steps, title: 'X', id: 'x', ...extra });
   const ok = n => ({ name: n, ok: true }), bad = (n, error = 'hata') => ({ name: n, ok: false, error });
   await deneme('Seviye: sepete ekleme / sepet / checkout / ana sayfa → ACİL', () => {

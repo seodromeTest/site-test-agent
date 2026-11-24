@@ -133,6 +133,12 @@ permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sa
   tur) içinde her ürünün sıradaki her türü en az bir kez denenince saatlik tur bir kez "📄 Çapraz dosya türü kontrolü tamamlandı"
   maili gönderir: Excel'de SADECE hatalı kombinasyonlar (takılanlar + bilinen sorunlar; site, ürün, tür, adım). `_tur.mail` ile
   bir kez. Ara hatalar her zamanki Uyarı mailleriyle. Kullanıcı saatlik sonuçların sohbette paylaşılmasını istemiyor (sorarsa).
+- **Test aşaması tur raporu (kullanıcı isteği, 24 Kasım):** her saatlik tur başlarken `_kapsam._turlar`'a "başladı" yazılır ve
+  state hemen kaydedilir; 55 dk süre sınırıyla kesilen turda node yazamasa da workflow'un "Uyarı durumunu kaydet" adımı (always)
+  çalışır (23 Kasım 23:00 turunda doğrulandı) → kayıt "başladı" kalır = yarıda kesildi. Biten tur süre, atlanan siteler, tekrar
+  denemeler, takılanlarla güncellenir. Çapraz kontrol Excel'inde ek sayfalar: "Turlar" (her tur: süre, durum, atlanan, takılan;
+  hiç başlamayan saatler) ve "Tekrar denemeler" (ilk denemede takılıp ikinci denemede geçen/takılan). 23 Kasım 16:00 ve 23:00
+  turları 55 dk'ya takıldı (çok takılan ürün × 2 dk bekleme + tekrar).
 - Make'te saatlik senaryo kalıcı (10203711; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.
