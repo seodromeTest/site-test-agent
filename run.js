@@ -413,6 +413,13 @@ async function testSite(browser, site, isFirstSite, prev) {
   // Dosya türü kapsamı aynı dosyada (_kapsam): uyarı durumundan ayrı tutulur (kapsam.js)
   const kapsam = prev._kapsam || {};
   delete prev._kapsam;
+  // Test aşaması (kullanıcı isteği, 24 Kasım): her saatlik tur başlarken kayda yazılır. Tur süre sınırına takılıp kesilirse
+  // (node bitmeden iş iptal) kayıt "başladı" olarak kalır; workflow'un cache kaydet adımı (always) bunu saklar → raporda "yarıda kesildi".
+  const gercekTurBasta = HOURLY && !PLAN && !FAIL_DEMO && !ONLY && !arg('sites');
+  if (gercekTurBasta) {
+    require('./kapsam').turBasladi(kapsam, startedAt);
+    fs.writeFileSync(STATE, JSON.stringify({ ...prev, _kapsam: kapsam }, null, 1));
+  }
 
   if (PLAN) {
     for (const name of SITES) {
@@ -477,6 +484,7 @@ async function testSite(browser, site, isFirstSite, prev) {
   const K = require('./kapsam');
   const gercekTur = HOURLY && !FAIL_DEMO && !ONLY && !arg('sites');
   if (HOURLY) K.kaydet(kapsam, sites, startedAt);
+  if (gercekTur) K.turBitti(kapsam, startedAt, sites, Date.now() - t0);
   // Çapraz kontrol: her ürün × tür en az bir kez denendiyse hatalıların Excel'i bir kez mail olarak gider
   let capraz = null;
   if (gercekTur && K.tamamlandi(kapsam) && !kapsam._tur.mail) {
