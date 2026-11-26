@@ -320,21 +320,30 @@ const SKIP_ROW = (bolum, adres) => ({ bolum, kontrol: 'Kontrol', adres, sonuc: '
 const rest = (min, max) => PACE ? new Promise(r => setTimeout(r, min * 1000 + Math.random() * (max - min) * 1000)) : Promise.resolve();
 // Saatlik testte kısa aralar (siteye yük az: sitede saatte 1 sepete ekleme)
 const hourlyRest = (min, max) => HOURLY && !process.env.NO_PACE ? new Promise(r => setTimeout(r, min * 1000 + Math.random() * (max - min) * 1000)) : Promise.resolve();
-// Saatlik testte başarısız akış 2 dk sonra tekrar denenir (geçici aksaklık ACİL mail sayılmasın)
-const retryWait = r => HOURLY && !process.env.NO_PACE ? 120 : PACE ? (r.botBlock ? 120 : 45) : (r.botBlock ? 60 : 0);
+// Saatlik testte tekrar deneme önemine göre (26 Kasım): ACİL türü (ana sayfa/sepet/checkout) ve bot koruması 2 dk bekleyip,
+// upload aracı sorunu (yükleme/builder) 10 sn sonra tekrar denenir: 2 dk beklemek orada fayda etmiyor, turu uzatıyordu.
+const retryWait = r => HOURLY && !process.env.NO_PACE ? (r.botBlock || require('./uyari').severity(r) === 'acil' ? 120 : 10)
+  : PACE ? (r.botBlock ? 120 : 45) : (r.botBlock ? 60 : 0);
 
 // Saatlik testte ürünün bu turda yükleyeceği dosya: ürünün kabul ettiği türlerden (saatlik.js formatlar) SIRADAKİ.
 // Ürün sitede n ürün arasında n saatte bir sıraya girer; o ürünün kaçıncı turu = saat no / n. Her turda bir sonraki tür.
 // --format <uzantı> ile deneme için tür zorlanabilir (ürün o türü kabul etmiyorsa sıradaki kullanılır).
 let formatTurn = 1;
+let KAPSAM = {}; // dosya türü kapsam kaydı (state.json _kapsam); ana akışta yüklenir
+const formatDir = flow => path.join(__dirname, 'fixtures', 'formatlar', flow.fixture === 'builder' ? 'builder' : 'gangsheet');
+const fileFor = (flow, ext) => { const f = fs.readdirSync(formatDir(flow)).find(x => x.endsWith('.' + ext)); return f && path.join(formatDir(flow), f); };
 function formatFile(site, flow, id) {
   const host = new URL(site.base).hostname.replace(/^www\./, '');
   const kabul = SAATLIK.formatlar[`${host}/${id}`];
   if (!kabul) throw new Error(`saatlik.js: ${host}/${id} için kabul edilen dosya türleri (formatlar) yok`);
   const dir = path.join(__dirname, 'fixtures', 'formatlar', flow.fixture === 'builder' ? 'builder' : 'gangsheet');
-  const files = SAATLIK.FORMAT_SIRASI.filter(ext => kabul.includes(ext))
+  const hepsi = SAATLIK.FORMAT_SIRASI.filter(ext => kabul.includes(ext))
     .map(ext => fs.readdirSync(dir).find(f => f.endsWith('.' + ext))).filter(Boolean);
-  if (!files.length) throw new Error(`fixtures/formatlar: ${host}/${id} için dosya yok`);
+  if (!hepsi.length) throw new Error(`fixtures/formatlar: ${host}/${id} için dosya yok`);
+  // Doğrulanmış sorun (26 Kasım): bu ürün bu türde iki farklı turda takıldıysa (kapsam.js hataSayisi ≥ 2) sırada atlanır;
+  // bir kez Uyarı maili gitmiş ve çapraz kontrol Excel'inde duruyor. Hepsi doğrulanmışsa liste olduğu gibi kalır.
+  const dogrulanan = f => (KAPSAM[`${host}/${id}`]?.[f.split('.').pop()]?.hataSayisi || 0) >= 2;
+  const files = hepsi.filter(f => !dogrulanan(f)).length ? hepsi.filter(f => !dogrulanan(f)) : hepsi;
   const zorla = arg('format') && files.find(f => f.endsWith('.' + arg('format')));
   return path.join(dir, zorla || files[formatTurn % files.length]);
 }
@@ -354,10 +363,11 @@ function hourlyFlows(site, prev = {}) {
   // Deneme: --only verilmişse sıraya bakılmaz, listedeki o ürünler test edilir (ör. --only anasayfa,dtf-gang-sheet)
   if (ONLY) return [homeFlow(site), ...list];
   const pick = [list[HOUR % list.length]];
-  // Sorunu olan (uyarı maili gitmiş) ürünler düzelene kadar her saat ayrıca denenir: "Düzeldi" maili geç kalmasın
+  // Sadece ACİL durumdaki ürünler (sepet/checkout vb.) düzelene kadar her saat, takıldığı dosya türüyle ayrıca denenir (en fazla 1).
+  // Upload aracı sorunları (Uyarı) ek denenmez: sıraları gelince denenir (26 Kasım: turları 55 dk'ya taşıyordu).
   for (const f of list) {
-    const st = prev[`${site.domain}/${f.id}`];
-    if (pick.length < 3 && !pick.includes(f) && st && st.level !== 'engel') pick.push(f);
+    const acil = Object.entries(prev).find(([k, v]) => k.startsWith(`${site.domain}/${f.id}#`) && v.level === 'acil');
+    if (pick.length < 2 && acil && !pick.some(x => x.id === f.id)) pick.push({ ...f, fixtureFile: fileFor(f, acil[0].split('#')[1]) || f.fixtureFile });
   }
   return [homeFlow(site), ...pick];
 }
@@ -374,14 +384,20 @@ async function testSite(browser, site, isFirstSite, prev) {
     if (!r.ok && !demoBreak) {
       const first = r.steps.find(s => !s.ok);
       // İlk denemedeki takılmanın ekran görüntüsünü sakla (geçici aksaklık mı, gerçek sorun mu incelemek için)
-      if (r.screenshot) fs.writeFileSync(path.join(OUT, `ilk-deneme-${site.domain}-${flow.id}-${Date.now()}.jpg`), Buffer.from(r.screenshot, 'base64'));
+      const ilkKanit = `ilk-deneme-${site.domain}-${flow.id}${r.file ? '-' + r.file.split('.').pop() : ''}-${Date.now()}.jpg`;
+      if (r.screenshot) fs.writeFileSync(path.join(OUT, ilkKanit), Buffer.from(r.screenshot, 'base64'));
       console.log(`  ↻ ${site.domain}/${flow.id} ilk denemede takıldı (${first?.name}: ${first?.error}), tekrar deneniyor`);
       // Bot korumasına takıldıysa biraz bekle (koruma kısa süreli)
       await new Promise(res => setTimeout(res, retryWait(r) * 1000));
       const retry = await runFlow(browser, site, flow, false);
       retry.retried = true;
-      retry.firstAttempt = { step: first?.name, error: first?.error, botBlock: r.botBlock };
+      retry.firstAttempt = { step: first?.name, error: first?.error, botBlock: r.botBlock, ...(r.screenshot ? { kanit: ilkKanit } : {}) };
       r = retry;
+    }
+    // İkinci denemede de takıldıysa onun ekran görüntüsü de dosya olarak (çapraz kontrol Excel'inde link)
+    if (!r.ok && r.screenshot) {
+      r.kanit = `hata-${site.domain}-${flow.id}${r.file ? '-' + r.file.split('.').pop() : ''}-${Date.now()}.jpg`;
+      fs.writeFileSync(path.join(OUT, r.kanit), Buffer.from(r.screenshot, 'base64'));
     }
     flows.push(r);
     const bad = r.steps.find(s => !s.ok);
@@ -413,6 +429,7 @@ async function testSite(browser, site, isFirstSite, prev) {
   // Dosya türü kapsamı aynı dosyada (_kapsam): uyarı durumundan ayrı tutulur (kapsam.js)
   const kapsam = prev._kapsam || {};
   delete prev._kapsam;
+  KAPSAM = kapsam;
   // Test aşaması (kullanıcı isteği, 24 Kasım): her saatlik tur başlarken kayda yazılır. Tur süre sınırına takılıp kesilirse
   // (node bitmeden iş iptal) kayıt "başladı" olarak kalır; workflow'un cache kaydet adımı (always) bunu saklar → raporda "yarıda kesildi".
   const gercekTurBasta = HOURLY && !PLAN && !FAIL_DEMO && !ONLY && !arg('sites');
@@ -421,6 +438,8 @@ async function testSite(browser, site, isFirstSite, prev) {
     fs.writeFileSync(STATE, JSON.stringify({ ...prev, _kapsam: kapsam }, null, 1));
   }
 
+  // Saatlik testte site sırası her saat bir kayar (26 Kasım): tur uzarsa hep aynı site (sondaki) atlanmasın
+  if (HOURLY && !arg('sites')) SITES.push(...SITES.splice(0, HOUR % SITES.length));
   if (PLAN) {
     for (const name of SITES) {
       const site = require(`./sites/${name}`);

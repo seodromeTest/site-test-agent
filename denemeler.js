@@ -191,6 +191,36 @@ async function deneme(ad, fn) {
     assert.deepEqual(wb.worksheets.map(w => w.name), ['Hatalı kombinasyonlar', 'Turlar', 'Tekrar denemeler']);
     assert.match(m.html, /1 yarıda kesildi/);
   });
+  await deneme('Doğrulanmış sorun: aynı ürün + tür iki farklı turda takılırsa hataSayisi 2; geçince sıfırlanır; ekran görüntüsü kaydı (26 Kasım)', () => {
+    const K = require('./kapsam');
+    const tur = (t, ok) => [{ domain: 'eagledtfprint.com', flows: [{ id: 'dtf-gang-sheet-upload', file: 'gangsheet_22x24in_300dpi.jpg', ok, kanit: ok ? undefined : 'hata-x.jpg', steps: [{ name: 'Sepete ekle', ok, error: ok ? undefined : 'tıklanamadı' }] }] }];
+    const k = {};
+    K.kaydet(k, tur('2026-11-26T10:00:00Z', false), '2026-11-26T10:00:00Z');
+    assert.equal(k['eagledtfprint.com/dtf-gang-sheet-upload'].jpg.hataSayisi, 1);
+    assert.equal(k['eagledtfprint.com/dtf-gang-sheet-upload'].jpg.kanit, 'hata-x.jpg');
+    K.kaydet(k, tur('2026-11-26T11:00:00Z', false), '2026-11-26T11:00:00Z');
+    assert.equal(k['eagledtfprint.com/dtf-gang-sheet-upload'].jpg.hataSayisi, 2);
+    const h = K.hatalilar(k).find(r => r.tur === 'jpg' && r.site === 'eagledtfprint.com');
+    assert.match(h.durum, /iki turda doğrulandı/);
+    K.kaydet(k, tur('2026-11-27T10:00:00Z', true), '2026-11-27T10:00:00Z');
+    assert.equal(k['eagledtfprint.com/dtf-gang-sheet-upload'].jpg.ok, true);
+    assert.ok(!k['eagledtfprint.com/dtf-gang-sheet-upload'].jpg.hataSayisi);
+  });
+  await deneme('Uyarı durumu ürün + dosya türü başına: yeni tür takılırsa yeni mail, aynı tür sürerse mail yok, eski türsüz kayıt kalkar (26 Kasım)', () => {
+    const f = (file, ok) => ({ id: 'p', title: 'P (Build a Gang Sheet)', file, ok, steps: [{ name: 'Upload', ok, error: ok ? undefined : 'x' }] });
+    const tur = flows => [{ domain: 'a.com', flows }];
+    const r1 = alertState(tur([f('builder_10x10in_300dpi.svg', false)]), { 'a.com/p': { level: 'uyari', since: '2026-11-25T00:00:00Z' } }, '2026-11-26T10:00:00Z');
+    assert.ok(r1.now['a.com/p#svg']); assert.ok(!r1.now['a.com/p']); assert.equal(r1.newFailures.length, 1);
+    const r2 = alertState(tur([f('builder_10x10in_300dpi.png', true)]), r1.now, '2026-11-26T11:00:00Z');
+    assert.equal(r2.recovered.length, 0); assert.ok(r2.now['a.com/p#svg']);           // png geçti: svg sorunu açık kalır
+    const r3 = alertState(tur([f('builder_10x10in_300dpi.svg', false)]), r2.now, '2026-11-27T10:00:00Z');
+    assert.equal(r3.newFailures.length, 0); assert.equal(r3.ongoing.length, 1);
+  });
+  await deneme('Plan: site sırası her saat kayar; doğrulanmış tür sırada atlanır (26 Kasım)', () => {
+    const cp = require('child_process');
+    const plan = saat => cp.execFileSync('node', ['-e', `const r=Date.now;Date.now=()=>${saat}*3600000+60000;process.argv=['node','run.js','--mode','hourly','--plan'];require('./run.js')`], { cwd: __dirname }).toString().trim().split('\n')[0].split(':')[0];
+    assert.notEqual(plan(500000), plan(500001));
+  });
   const flow = (steps, extra = {}) => ({ ok: !steps.some(s => !s.ok), steps, title: 'X', id: 'x', ...extra });
   const ok = n => ({ name: n, ok: true }), bad = (n, error = 'hata') => ({ name: n, ok: false, error });
   await deneme('Seviye: sepete ekleme / sepet / checkout / ana sayfa → ACİL', () => {

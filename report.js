@@ -118,6 +118,7 @@ function build(run) {
   ${uyari.length ? `<div style="background:#fff8c5;border:1px solid #d4a72c;border-radius:8px;padding:14px 16px;margin-bottom:16px">
     <div style="font-size:18px;font-weight:700;color:${C.warn}">⚠️ Uyarı – site çalışıyor, bir parçası sorunlu</div>
     ${li(uyari.map(x => `<li><b>${esc(x.site)}</b> – ${esc(x.flow)}${x.dosya ? ` <span style="font-size:12px">(test dosyası: ${esc(x.dosya)})</span>` : ''}${x.step ? `<br><span style="font-size:12px">Takıldığı adım: ${esc(x.step)}${x.error ? ` – ${esc(x.error)}` : ''}</span>` : ''}</li>`))}
+    ${process.env.GITHUB_RUN_ID ? `<div style="font-size:12px;margin-top:6px">Ekran görüntüleri: <a href="${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}">bu turun GitHub sayfası → Artifacts</a></div>` : ''}
     <div style="font-size:12px;color:${C.muted};margin-top:8px">Upload aracı (yükleme / builder) çalışmıyor ya da ana sayfa çok yavaş. Sorun sürdükçe tekrar mail gelmez; düzelince "Düzeldi" maili gelir.</div>
   </div>` : ''}
   ${engel.length ? `<div style="background:#f6f8fa;border:1px solid #d0d7de;border-radius:8px;padding:14px 16px;margin-bottom:16px">
