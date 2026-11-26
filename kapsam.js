@@ -9,6 +9,8 @@
 const SAATLIK = require('./saatlik');
 
 const host = u => new URL(u).hostname.replace(/^www\./, '');
+// Bu GitHub turunun sayfası (Artifacts'te ekran görüntüleri, 14 gün)
+const RUN_URL = () => process.env.GITHUB_RUN_ID ? `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}` : '';
 const urunId = u => new URL(u).pathname.split('/products/')[1].replace(/\/$/, '');
 const ext = f => (f.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase();
 
@@ -21,8 +23,12 @@ function kaydet(kapsam, sites, startedAt) {
     if (!e) continue;
     const bad = f.steps.find(x => !x.ok);
     const k = `${s.domain.replace(/^www\./, '')}/${f.id}`;
+    const once = kapsam[k]?.[e];
+    // hataSayisi: aynı ürün + tür üst üste kaç turda takıldı (≥ 2 = doğrulanmış sorun, run.js sırada atlar)
     (kapsam[k] ||= {})[e] = f.ok ? { ok: true, t: startedAt }
-      : { ok: false, t: startedAt, adim: bad?.name, hata: (bad?.error || '').slice(0, 160), ...(f.botBlock ? { engel: f.botBlock } : {}) };
+      : { ok: false, t: startedAt, adim: bad?.name, hata: (bad?.error || '').slice(0, 160), ...(f.botBlock ? { engel: f.botBlock } : {}),
+          hataSayisi: f.botBlock ? (once?.hataSayisi || 0) : (once && !once.ok && once.t !== startedAt ? (once.hataSayisi || 1) + 1 : 1),
+          ...(RUN_URL() ? { tur: RUN_URL() } : {}), ...(f.kanit || f.firstAttempt?.kanit ? { kanit: f.kanit || f.firstAttempt.kanit } : {}) };
   }
   return kapsam;
 }
@@ -35,7 +41,8 @@ function hucre(kapsam, key, e, uygulama) {
   if (!kabul.includes(e)) return bilinen ? { durum: 'bilinen', not: bilinen } : { durum: 'yok' };
   if (!r) return { durum: 'bekliyor' };
   if (r.ok) return { durum: 'ok', t: r.t };
-  return { durum: r.engel ? 'engel' : 'hata', t: r.t, not: `${r.adim || ''}${r.hata ? ': ' + r.hata : ''}` };
+  return { durum: r.engel ? 'engel' : 'hata', t: r.t, not: `${r.adim || ''}${r.hata ? ': ' + r.hata : ''}`,
+    tur: r.tur, kanit: r.kanit, dogrulandi: (r.hataSayisi || 0) >= 2 };
 }
 
 // Tablo satırları: saatlik listedeki her ürün, sütunlar FORMAT_SIRASI
@@ -109,14 +116,14 @@ function excelSayfasi(wb, kapsam) {
 
 // Saatlik turun başı ve sonu (test aşaması raporu için)
 function turBasladi(kapsam, basla) {
-  (kapsam._turlar ||= []).push({ basla, durum: 'basladi' });
+  (kapsam._turlar ||= []).push({ basla, durum: 'basladi', ...(RUN_URL() ? { link: RUN_URL() } : {}) });
   if (kapsam._turlar.length > 400) kapsam._turlar.splice(0, kapsam._turlar.length - 400);
 }
 function turBitti(kapsam, basla, sites, ms) {
   const t = (kapsam._turlar ||= []).find(x => x.basla === basla) || (kapsam._turlar.push({ basla }), kapsam._turlar.at(-1));
   const tekrar = [], takilan = [];
   for (const s of sites) for (const f of s.flows) {
-    if (f.retried) tekrar.push({ site: s.domain, urun: f.title, dosya: f.file || '', ilk: `${f.firstAttempt?.step || ''}: ${(f.firstAttempt?.error || '').slice(0, 120)}${f.firstAttempt?.botBlock ? ` [${f.firstAttempt.botBlock}]` : ''}`, sonuc: f.ok ? 'ikinci denemede geçti' : 'ikinci denemede de takıldı' });
+    if (f.retried) tekrar.push({ site: s.domain, urun: f.title, dosya: f.file || '', kanit: f.firstAttempt?.kanit || '', ilk: `${f.firstAttempt?.step || ''}: ${(f.firstAttempt?.error || '').slice(0, 120)}${f.firstAttempt?.botBlock ? ` [${f.firstAttempt.botBlock}]` : ''}`, sonuc: f.ok ? 'ikinci denemede geçti' : 'ikinci denemede de takıldı' });
     if (!f.ok) takilan.push(`${s.domain} – ${f.title}${f.file ? ` (${f.file})` : ''}`);
   }
   Object.assign(t, { durum: 'tamamlandi', bitis: new Date().toISOString(), dk: +(ms / 60000).toFixed(1),
@@ -164,7 +171,8 @@ const tamamlandi = kapsam => !!kapsam._tur && eksikler(kapsam).length === 0;
 function hatalilar(kapsam) {
   const out = [];
   for (const r of tablo(kapsam)) for (const [e, h] of Object.entries(r.hucreler)) {
-    if (h.durum === 'hata' || h.durum === 'engel') out.push({ ...r, tur: e, durum: h.durum === 'hata' ? 'Takıldı' : 'Test edilemedi (bot koruması)', t: h.t, aciklama: h.not || '' });
+    if (h.durum === 'hata' || h.durum === 'engel') out.push({ ...r, tur: e, durum: h.durum === 'engel' ? 'Test edilemedi (bot koruması)' : h.dogrulandi ? 'Takıldı (iki turda doğrulandı)' : 'Takıldı',
+      t: h.t, aciklama: h.not || '', turLink: h.tur || '', kanit: h.kanit || '' });
     else if (h.durum === 'bilinen') out.push({ ...r, tur: e, durum: 'Bilinen sorun (sırada yok)', t: '', aciklama: h.not || '' });
   }
   return out;
@@ -180,18 +188,20 @@ async function caprazRapor(kapsam, bitis) {
   ws.addRow(['Çapraz dosya türü kontrolü – hatalı kombinasyonlar']).font = { bold: true, size: 14 };
   ws.addRow([`${tarih(kapsam._tur.basla)} – ${tarih(bitis)} (Berlin) · ${toplam} ürün × tür kombinasyonu denendi · ${o.ok} geçti · ${o.hata} takıldı · ${o.bilinen} bilinen sorun`]);
   ws.addRow([]);
-  const h = ws.addRow(['Site', 'Upload ürünü', 'Uygulama', 'Dosya türü', 'Sonuç', 'Son deneme', 'Açıklama (takıldığı adım / sebep)']);
+  const h = ws.addRow(['Site', 'Upload ürünü', 'Uygulama', 'Dosya türü', 'Sonuç', 'Son deneme', 'Açıklama (takıldığı adım / sebep)', 'Ekran görüntüsü']);
   h.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   h.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF24292F' } }; });
   for (const r of rows) {
-    const row = ws.addRow([r.site, { text: r.urun, hyperlink: r.url }, r.uygulama, r.tur.toUpperCase(), r.durum, tarih(r.t), r.aciklama]);
-    row.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: r.durum === 'Takıldı' ? 'FFFFEBE9' : 'FFFFF8C5' } };
+    // Ekran görüntüsü: o turun GitHub sayfası → Artifacts (sonuclar-hourly-…) → dosya adı (14 gün saklanır, GitHub girişi gerekir)
+    const kanit = r.turLink ? { text: r.kanit ? `Tur sayfası → Artifacts → ${r.kanit}` : 'Tur sayfası (Artifacts)', hyperlink: r.turLink } : '';
+    const row = ws.addRow([r.site, { text: r.urun, hyperlink: r.url }, r.uygulama, r.tur.toUpperCase(), r.durum, tarih(r.t), r.aciklama, kanit]);
+    row.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: /^Takıldı/.test(r.durum) ? 'FFFFEBE9' : 'FFFFF8C5' } };
     row.alignment = { vertical: 'top', wrapText: true };
   }
   if (!rows.length) ws.addRow(['Hatalı kombinasyon yok: her ürün kabul ettiği her türde geçti.']);
-  ws.columns = [{ width: 24 }, { width: 42 }, { width: 20 }, { width: 11 }, { width: 26 }, { width: 13 }, { width: 90 }];
+  ws.columns = [{ width: 24 }, { width: 42 }, { width: 20 }, { width: 11 }, { width: 28 }, { width: 13 }, { width: 80 }, { width: 60 }];
   ws.views = [{ state: 'frozen', ySplit: 4 }];
-  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 7 } };
+  ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: 8 } };
   // Test aşaması: turların kendi durumu
   const tr = turRaporu(kapsam, bitis);
   const head = (sh, cols) => { const r = sh.addRow(cols); r.font = { bold: true, color: { argb: 'FFFFFFFF' } }; r.eachCell(c => { c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF24292F' } }; }); };
@@ -199,10 +209,11 @@ async function caprazRapor(kapsam, bitis) {
   wt.addRow(['Saatlik turlar (test aşaması)']).font = { bold: true, size: 14 };
   wt.addRow([`${tr.ozet.toplam} tur · ${tr.ozet.tamam} sorunsuz tamamlandı · ${tr.ozet.kesilen} yarıda kesildi · ${tr.ozet.atlanan} turda site atlandı · ${tr.ozet.baslamayan} saat tur hiç başlamadı · ortalama ${tr.ozet.ortDk} dk, en uzun ${tr.ozet.enUzunDk} dk · ${tr.ozet.tekrar} tekrar deneme`]);
   wt.addRow([]);
-  head(wt, ['Başlangıç', 'Durum', 'Süre (dk)', 'Atlanan siteler', 'Takılan (iki denemede de)', 'Tekrar deneme']);
+  head(wt, ['Başlangıç', 'Durum', 'Süre (dk)', 'Atlanan siteler', 'Takılan (iki denemede de)', 'Tekrar deneme', 'Tur sayfası (ekran görüntüleri)']);
   const KES = { 'Tamamlandı': 'FFDAFBE1', 'Sürüyor': 'FFF6F8FA' };
   for (const t of tr.satirlar) {
-    const r = wt.addRow([tarih(t.basla), t.durumYazi, t.dk ?? '', (t.atlanan || []).join(', '), (t.takilan || []).join('\n'), t.tekrar?.length || 0]);
+    const r = wt.addRow([tarih(t.basla), t.durumYazi, t.dk ?? '', (t.atlanan || []).join(', '), (t.takilan || []).join('\n'), t.tekrar?.length || 0,
+      t.link ? { text: 'Tur sayfası → Artifacts', hyperlink: t.link } : '']);
     r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: KES[t.durumYazi] || 'FFFFEBE9' } };
     r.alignment = { vertical: 'top', wrapText: true };
   }
@@ -210,22 +221,23 @@ async function caprazRapor(kapsam, bitis) {
     const r = wt.addRow([tarih(b), 'Tur hiç başlamadı (sıraya girip iptal edildi ya da Make başlatmadı)', '', '', '', '']);
     r.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF8C5' } };
   }
-  wt.columns = [{ width: 14 }, { width: 46 }, { width: 10 }, { width: 30 }, { width: 70 }, { width: 13 }];
+  wt.columns = [{ width: 14 }, { width: 46 }, { width: 10 }, { width: 30 }, { width: 70 }, { width: 13 }, { width: 26 }];
   wt.views = [{ state: 'frozen', ySplit: 4 }];
   const wr = wb.addWorksheet('Tekrar denemeler');
   wr.addRow(['İlk denemede takılıp 2 dk sonra tekrar denenenler']).font = { bold: true, size: 14 };
   wr.addRow([]);
-  head(wr, ['Tur', 'Site', 'Ürün', 'Test dosyası', 'İlk denemede', 'Sonuç']);
+  head(wr, ['Tur', 'Site', 'Ürün', 'Test dosyası', 'İlk denemede', 'Sonuç', 'Ekran görüntüsü (ilk deneme)']);
   for (const t of tr.satirlar) for (const x of t.tekrar || []) {
-    const r = wr.addRow([tarih(t.basla), x.site, x.urun, x.dosya, x.ilk, x.sonuc]);
+    const r = wr.addRow([tarih(t.basla), x.site, x.urun, x.dosya, x.ilk, x.sonuc,
+      t.link ? { text: x.kanit ? `Tur sayfası → Artifacts → ${x.kanit}` : 'Tur sayfası (Artifacts)', hyperlink: t.link } : '']);
     r.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: /geçti/.test(x.sonuc) ? 'FFFFF8C5' : 'FFFFEBE9' } };
     r.alignment = { vertical: 'top', wrapText: true };
   }
-  wr.columns = [{ width: 14 }, { width: 24 }, { width: 44 }, { width: 30 }, { width: 70 }, { width: 24 }];
+  wr.columns = [{ width: 14 }, { width: 24 }, { width: 44 }, { width: 30 }, { width: 70 }, { width: 24 }, { width: 60 }];
   wr.views = [{ state: 'frozen', ySplit: 3 }];
   const excel = Buffer.from(await wb.xlsx.writeBuffer());
   const esc = x => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const takilan = rows.filter(r => r.durum !== 'Bilinen sorun (sırada yok)');
+  const takilan = rows.filter(r => /^Takıldı/.test(r.durum));
   return {
     kind: 'capraz', sendEmail: true,
     subject: `📄 Çapraz dosya türü kontrolü tamamlandı – ${takilan.length ? `${takilan.length} hatalı kombinasyon` : 'hata yok'}${o.bilinen ? ` (+${o.bilinen} bilinen sorun)` : ''}`,

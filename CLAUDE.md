@@ -139,6 +139,15 @@ permissions policy. Raporda "Tarayıcı konsolundaki hatalar" satırı artık sa
   denemeler, takılanlarla güncellenir. Çapraz kontrol Excel'inde ek sayfalar: "Turlar" (her tur: süre, durum, atlanan, takılan;
   hiç başlamayan saatler) ve "Tekrar denemeler" (ilk denemede takılıp ikinci denemede geçen/takılan). 23 Kasım 16:00 ve 23:00
   turları 55 dk'ya takıldı (çok takılan ürün × 2 dk bekleme + tekrar).
+- **Tur süresi düzeni (26 Kasım; 50 turun 9'u 55 dk'ya takılıyordu, Legend sonda olduğu için hep atlanıyordu):**
+  (1) doğrulanmış sorun: aynı ürün + tür iki farklı turda takılırsa (`_kapsam` hataSayisi ≥ 2) sırada atlanır, Excel'de "Takıldı
+  (iki turda doğrulandı)"; geçince sayaç sıfırlanır. (2) tekrar deneme: ACİL türü ve bot koruması 2 dk bekleyip, upload aracı
+  sorunu 10 sn sonra. (3) her saat ayrıca deneme sadece ACİL ürünlere, takıldığı türle, sitede en fazla 1. (4) site sırası her saat
+  bir kayar. Uyarı durumu upload akışlarında ürün + tür başına (`site/ürün#uzantı`): yeni takılan tür bir kez mail, düzelme aynı
+  türde geçince; eski türsüz kayıtlar sessizce kalkar.
+- **Ekran görüntüleri:** ilk denemenin (`ilk-deneme-…-<uzantı>-….jpg`) ve iki denemede de takılanın (`hata-…-<uzantı>-….jpg`)
+  görüntüsü turun Artifacts'ine kaydedilir; kapsam kaydında tur sayfası linki + dosya adı. Çapraz kontrol Excel'inde
+  "Ekran görüntüsü" sütunu (Tur sayfası → Artifacts → dosya; 14 gün, GitHub girişi gerekir); Uyarı/ACİL mailinde tur linki.
 - Make'te saatlik senaryo kalıcı (10203711; yukarıda). Make planı sınırı (ayda ~730 başlatma) ve upload
   uygulamalarının yükleme/depolama sınırları (saatte ~9 yükleme ≈ günde ~216, 24'ü builder kaydı) kullanıcıda.
 - Genel test sırasında saatlik turlar sıraya girer (concurrency group), araya düşenler atlanır; sorun değil.

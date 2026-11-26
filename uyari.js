@@ -36,8 +36,12 @@ function alertState(sites, prev, startedAt) {
   const now = { ...old }; // bu tur test edilmeyen kontrollerin durumu aynen kalır (sırası gelince denenir)
   const newFailures = [], recovered = [], ongoing = [];
   for (const s of sites) for (const f of s.flows) {
-    const key = `${s.domain}/${f.id}`, p = old[key], lvl = severity(f);
-    const base = { site: s.domain, flow: f.title, ...(f.file ? { dosya: f.file } : {}) };
+    // Upload akışlarında durum ürün + dosya türü başına (26 Kasım): her yeni takılan tür bir kez mail; düzelme aynı türde geçince.
+    // Eski biçimdeki (türsüz) kayıt sessizce kalkar.
+    const ext = f.file && f.file.split('.').pop().toLowerCase();
+    if (ext && now[`${s.domain}/${f.id}`]) delete now[`${s.domain}/${f.id}`];
+    const key = ext ? `${s.domain}/${f.id}#${ext}` : `${s.domain}/${f.id}`, p = old[key], lvl = severity(f);
+    const base = { site: s.domain, flow: f.title, ...(f.file ? { dosya: f.file } : {}), ...(f.kanit ? { kanit: f.kanit } : {}) };
     const bad = f.steps.find(x => !x.ok);
     if (lvl === 'engel') {
       if (p && p.level !== 'engel') continue; // önceden gerçek sorun vardı; bu tur bilinmiyor, durum aynen kalır
